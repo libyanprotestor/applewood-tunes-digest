@@ -10,7 +10,7 @@ Database tables:
 - `items` — title, artist, ISRC/UPC, type (ringtone / single / album), linked to a sublabel. Imported via CSV.
 - `sales` — one row per report line: date, territory, units, unit price, original currency, USD amount, matched item, sublabel, report source.
 - `unmatched_sales` — report rows whose ISRC/UPC isn't in the catalog, kept for admin review and assignable to an item later.
-- `fx_rates` — daily rate per currency to USD, stored by date so historical totals never change.
+- No FX table — amounts are converted to USD at import time using the report date's rate and stored in USD only.
 - `report_runs` — per-date fetch log: status, rows parsed, matched/unmatched counts, errors, retry count.
 - `profiles` + `user_roles` (admin / sublabel) — roles in their own table, never on the profile.
 
