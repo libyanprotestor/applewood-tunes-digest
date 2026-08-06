@@ -97,7 +97,7 @@ function ReportsPage() {
               </p>
               <p className="text-xs text-muted-foreground">
                 {r.rows_matched ?? 0} matched · {r.rows_unmatched ?? 0} unmatched
-                {r.message ? ` · ${r.message}` : ""}
+                {r.error_message ? ` · ${r.error_message}` : ""}
               </p>
             </div>
             <span
