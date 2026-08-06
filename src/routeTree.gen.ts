@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedCatalogRouteImport } from './routes/_authenticated/catalog'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedSublabelsRouteImport } from './routes/_authenticated/sublabels'
+import { Route as AuthenticatedUnmatchedRouteImport } from './routes/_authenticated/unmatched'
 import { Route as ApiPublicHooksAppleReportsRouteImport } from './routes/api/public/hooks/apple-reports'
 
 const IndexRoute = IndexRouteImport.update({
@@ -46,6 +47,11 @@ const AuthenticatedSublabelsRoute = AuthenticatedSublabelsRouteImport.update({
   path: '/sublabels',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedUnmatchedRoute = AuthenticatedUnmatchedRouteImport.update({
+  id: '/unmatched',
+  path: '/unmatched',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicHooksAppleReportsRoute =
   ApiPublicHooksAppleReportsRouteImport.update({
     id: '/api/public/hooks/apple-reports',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/catalog': typeof AuthenticatedCatalogRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/sublabels': typeof AuthenticatedSublabelsRoute
+  '/unmatched': typeof AuthenticatedUnmatchedRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRoutesByTo {
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/catalog': typeof AuthenticatedCatalogRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/sublabels': typeof AuthenticatedSublabelsRoute
+  '/unmatched': typeof AuthenticatedUnmatchedRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRoutesById {
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/_authenticated/catalog': typeof AuthenticatedCatalogRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/sublabels': typeof AuthenticatedSublabelsRoute
+  '/_authenticated/unmatched': typeof AuthenticatedUnmatchedRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRouteTypes {
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/catalog'
     | '/dashboard'
     | '/sublabels'
+    | '/unmatched'
     | '/api/public/hooks/apple-reports'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -95,6 +105,7 @@ export interface FileRouteTypes {
     | '/catalog'
     | '/dashboard'
     | '/sublabels'
+    | '/unmatched'
     | '/api/public/hooks/apple-reports'
   id:
     | '__root__'
@@ -104,6 +115,7 @@ export interface FileRouteTypes {
     | '/_authenticated/catalog'
     | '/_authenticated/dashboard'
     | '/_authenticated/sublabels'
+    | '/_authenticated/unmatched'
     | '/api/public/hooks/apple-reports'
   fileRoutesById: FileRoutesById
 }
@@ -158,6 +170,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSublabelsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/unmatched': {
+      id: '/_authenticated/unmatched'
+      path: '/unmatched'
+      fullPath: '/unmatched'
+      preLoaderRoute: typeof AuthenticatedUnmatchedRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/hooks/apple-reports': {
       id: '/api/public/hooks/apple-reports'
       path: '/api/public/hooks/apple-reports'
@@ -172,12 +191,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCatalogRoute: typeof AuthenticatedCatalogRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedSublabelsRoute: typeof AuthenticatedSublabelsRoute
+  AuthenticatedUnmatchedRoute: typeof AuthenticatedUnmatchedRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCatalogRoute: AuthenticatedCatalogRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedSublabelsRoute: AuthenticatedSublabelsRoute,
+  AuthenticatedUnmatchedRoute: AuthenticatedUnmatchedRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
