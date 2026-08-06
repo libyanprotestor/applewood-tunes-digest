@@ -10,33 +10,132 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedCatalogRouteImport } from './routes/_authenticated/catalog'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
+import { Route as AuthenticatedSublabelsRouteImport } from './routes/_authenticated/sublabels'
+import { Route as AuthenticatedUnmatchedRouteImport } from './routes/_authenticated/unmatched'
+import { Route as ApiPublicHooksAppleReportsRouteImport } from './routes/api/public/hooks/apple-reports'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedCatalogRoute = AuthenticatedCatalogRouteImport.update({
+  id: '/catalog',
+  path: '/catalog',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSublabelsRoute = AuthenticatedSublabelsRouteImport.update({
+  id: '/sublabels',
+  path: '/sublabels',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedUnmatchedRoute = AuthenticatedUnmatchedRouteImport.update({
+  id: '/unmatched',
+  path: '/unmatched',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiPublicHooksAppleReportsRoute =
+  ApiPublicHooksAppleReportsRouteImport.update({
+    id: '/api/public/hooks/apple-reports',
+    path: '/api/public/hooks/apple-reports',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/catalog': typeof AuthenticatedCatalogRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/reports': typeof AuthenticatedReportsRoute
+  '/sublabels': typeof AuthenticatedSublabelsRoute
+  '/unmatched': typeof AuthenticatedUnmatchedRoute
+  '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/catalog': typeof AuthenticatedCatalogRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/reports': typeof AuthenticatedReportsRoute
+  '/sublabels': typeof AuthenticatedSublabelsRoute
+  '/unmatched': typeof AuthenticatedUnmatchedRoute
+  '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/catalog': typeof AuthenticatedCatalogRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/reports': typeof AuthenticatedReportsRoute
+  '/_authenticated/sublabels': typeof AuthenticatedSublabelsRoute
+  '/_authenticated/unmatched': typeof AuthenticatedUnmatchedRoute
+  '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/catalog'
+    | '/dashboard'
+    | '/reports'
+    | '/sublabels'
+    | '/unmatched'
+    | '/api/public/hooks/apple-reports'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/catalog'
+    | '/dashboard'
+    | '/reports'
+    | '/sublabels'
+    | '/unmatched'
+    | '/api/public/hooks/apple-reports'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/catalog'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/reports'
+    | '/_authenticated/sublabels'
+    | '/_authenticated/unmatched'
+    | '/api/public/hooks/apple-reports'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
+  ApiPublicHooksAppleReportsRoute: typeof ApiPublicHooksAppleReportsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,22 +147,90 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/catalog': {
+      id: '/_authenticated/catalog'
+      path: '/catalog'
+      fullPath: '/catalog'
+      preLoaderRoute: typeof AuthenticatedCatalogRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/reports': {
+      id: '/_authenticated/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AuthenticatedReportsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sublabels': {
+      id: '/_authenticated/sublabels'
+      path: '/sublabels'
+      fullPath: '/sublabels'
+      preLoaderRoute: typeof AuthenticatedSublabelsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/unmatched': {
+      id: '/_authenticated/unmatched'
+      path: '/unmatched'
+      fullPath: '/unmatched'
+      preLoaderRoute: typeof AuthenticatedUnmatchedRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/hooks/apple-reports': {
+      id: '/api/public/hooks/apple-reports'
+      path: '/api/public/hooks/apple-reports'
+      fullPath: '/api/public/hooks/apple-reports'
+      preLoaderRoute: typeof ApiPublicHooksAppleReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCatalogRoute: typeof AuthenticatedCatalogRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
+  AuthenticatedSublabelsRoute: typeof AuthenticatedSublabelsRoute
+  AuthenticatedUnmatchedRoute: typeof AuthenticatedUnmatchedRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCatalogRoute: AuthenticatedCatalogRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedReportsRoute: AuthenticatedReportsRoute,
+  AuthenticatedSublabelsRoute: AuthenticatedSublabelsRoute,
+  AuthenticatedUnmatchedRoute: AuthenticatedUnmatchedRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
+  ApiPublicHooksAppleReportsRoute: ApiPublicHooksAppleReportsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
