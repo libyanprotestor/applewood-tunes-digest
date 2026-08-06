@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedSublabelsRouteImport } from './routes/_authenticated/sublabels'
 import { Route as ApiPublicHooksAppleReportsRouteImport } from './routes/api/public/hooks/apple-reports'
 
 const IndexRoute = IndexRouteImport.update({
@@ -34,6 +35,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSublabelsRoute = AuthenticatedSublabelsRouteImport.update({
+  id: '/sublabels',
+  path: '/sublabels',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicHooksAppleReportsRoute =
   ApiPublicHooksAppleReportsRouteImport.update({
     id: '/api/public/hooks/apple-reports',
@@ -45,12 +51,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/sublabels': typeof AuthenticatedSublabelsRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/sublabels': typeof AuthenticatedSublabelsRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRoutesById {
@@ -59,19 +67,31 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/sublabels': typeof AuthenticatedSublabelsRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dashboard' | '/api/public/hooks/apple-reports'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/sublabels'
+    | '/api/public/hooks/apple-reports'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard' | '/api/public/hooks/apple-reports'
+  to:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/sublabels'
+    | '/api/public/hooks/apple-reports'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/dashboard'
+    | '/_authenticated/sublabels'
     | '/api/public/hooks/apple-reports'
   fileRoutesById: FileRoutesById
 }
@@ -112,6 +132,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/sublabels': {
+      id: '/_authenticated/sublabels'
+      path: '/sublabels'
+      fullPath: '/sublabels'
+      preLoaderRoute: typeof AuthenticatedSublabelsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/hooks/apple-reports': {
       id: '/api/public/hooks/apple-reports'
       path: '/api/public/hooks/apple-reports'
@@ -124,10 +151,12 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedSublabelsRoute: typeof AuthenticatedSublabelsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedSublabelsRoute: AuthenticatedSublabelsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -142,13 +171,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
