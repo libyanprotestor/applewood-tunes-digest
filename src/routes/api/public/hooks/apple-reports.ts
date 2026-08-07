@@ -1,10 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 /**
- * Called by the scheduler three times a day, once per Apple release window.
- * Apple publishes daily reports by 5am Pacific (Americas), 5am JST (Japan /
- * Australia / New Zealand) and 5am CET (everywhere else). If the report is not
- * ready the run is marked "not ready" and the next scheduled attempt retries it.
+ * Called by the scheduler once a day. Apple publishes the previous day's
+ * report for all territories; if it is not ready yet the run is marked
+ * "not ready" and the next scheduled attempt retries it.
  */
 export const Route = createFileRoute("/api/public/hooks/apple-reports")({
   server: {
@@ -16,21 +15,6 @@ export const Route = createFileRoute("/api/public/hooks/apple-reports")({
         if (!expected || apiKey !== expected) {
           return new Response(JSON.stringify({ error: "Unauthorized" }), {
             status: 401,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        let body: { region?: string } = {};
-        try {
-          body = (await request.json()) as { region?: string };
-        } catch {
-          body = {};
-        }
-
-        const region = body.region;
-        if (region !== "americas" && region !== "japan_anz" && region !== "europe_other") {
-          return new Response(JSON.stringify({ error: "Invalid region" }), {
-            status: 400,
             headers: { "Content-Type": "application/json" },
           });
         }
@@ -50,7 +34,6 @@ export const Route = createFileRoute("/api/public/hooks/apple-reports")({
         const { data: done } = await supabaseAdmin
           .from("report_runs")
           .select("report_date")
-          .eq("region", region)
           .eq("status", "success")
           .in("report_date", dates);
         const succeeded = new Set((done ?? []).map((r) => r.report_date as string));
@@ -58,10 +41,10 @@ export const Route = createFileRoute("/api/public/hooks/apple-reports")({
         const results = [];
         for (const date of dates) {
           if (succeeded.has(date)) continue;
-          results.push(await ingestReport(date, region));
+          results.push(await ingestReport(date));
         }
 
-        return new Response(JSON.stringify({ region, results }), {
+        return new Response(JSON.stringify({ results }), {
           headers: { "Content-Type": "application/json" },
         });
       },
