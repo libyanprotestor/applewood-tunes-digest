@@ -250,20 +250,15 @@ export const listRuns = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-/** Manually pulls a report for a given date and region. */
+/** Manually pulls the report for a given date. */
 export const runReportFetch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z
-      .object({
-        reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        region: z.enum(["americas", "japan_anz", "europe_other"]),
-      })
-      .parse(input),
+    z.object({ reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(input),
   )
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
     const { ingestReport } = await import("./ingest.server");
-    return ingestReport(data.reportDate, data.region);
+    return ingestReport(data.reportDate);
   });
