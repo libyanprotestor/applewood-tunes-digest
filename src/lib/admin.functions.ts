@@ -217,7 +217,7 @@ export const assignUnmatched = createServerFn({ method: "POST" })
       item_id: item.id,
       sublabel_id: item.sublabel_id,
       sale_date: row.sale_date,
-      region: row.region,
+      country_code: row.country_code,
       country_code: row.country_code,
       units: row.units,
       original_currency: row.original_currency,
