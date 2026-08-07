@@ -23,10 +23,10 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
@@ -37,23 +37,15 @@ function AuthPage() {
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
+    setError(null);
     try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        await navigate({ to: "/dashboard", replace: true });
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-        if (data.session) await navigate({ to: "/dashboard", replace: true });
-        else toast.success("Check your email to confirm your account.");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Something went wrong");
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) throw signInError;
+      await navigate({ to: "/dashboard", replace: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -62,13 +54,9 @@ function AuthPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {mode === "signin" ? "Sign in" : "Create the admin account"}
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {mode === "signin"
-            ? "Use the email and password issued to you."
-            : "The first account created becomes the company administrator."}
+          Use the email and password issued to you by your administrator.
         </p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
@@ -88,25 +76,26 @@ function AuthPage() {
             <Input
               id="password"
               type="password"
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              autoComplete="current-password"
               required
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
           <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+            {busy ? "Signing in…" : "Sign in"}
           </Button>
         </form>
 
-        <button
-          type="button"
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          className="mt-6 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-        >
-          {mode === "signin" ? "First time setup? Create the admin account" : "Back to sign in"}
-        </button>
+        <p className="mt-6 text-xs text-muted-foreground">
+          Accounts are created by the administrator. Contact them if you need access.
+        </p>
       </div>
     </main>
   );
