@@ -181,7 +181,7 @@ export const listUnmatched = createServerFn({ method: "GET" })
     await assertAdmin(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("unmatched_sales")
-      .select("id, sale_date, region, title, artist_name, isrc, upc, units, revenue_usd, country_code")
+      .select("id, sale_date, title, artist_name, isrc, upc, units, revenue_usd, country_code")
       .eq("resolved", false)
       .order("sale_date", { ascending: false })
       .limit(500);
