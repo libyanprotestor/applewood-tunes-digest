@@ -1,14 +1,7 @@
-import {
-  fetchDailyReport,
-  parseReport,
-  regionForCountry,
-  ReportNotReadyError,
-  type Region,
-} from "./reporter.server";
+import { fetchDailyReport, parseReport, ReportNotReadyError } from "./reporter.server";
 import { toUsd, warmRates } from "./fx.server";
 
 export interface IngestResult {
-  region: Region;
   reportDate: string;
   status: "success" | "not_ready" | "failed";
   rowsParsed: number;
@@ -23,26 +16,26 @@ function compact(value: string): string {
 }
 
 /**
- * Fetches Apple's daily Music Detailed report, keeps only the rows belonging to
- * `region`, converts revenue to USD, and stores matched / unmatched sales.
- * Re-running the same region + date replaces the previous rows.
+ * Fetches Apple's daily Music Detailed report for every territory in one call,
+ * converts revenue to USD, and stores matched / unmatched sales.
+ * Re-running the same date replaces the previous rows.
  */
-export async function ingestReport(reportDate: string, region: Region): Promise<IngestResult> {
+export async function ingestReport(reportDate: string): Promise<IngestResult> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const compactDate = reportDate.replace(/-/g, "");
 
   const { data: runRow } = await supabaseAdmin
     .from("report_runs")
     .upsert(
-      { region, report_date: reportDate, status: "pending", started_at: new Date().toISOString() },
-      { onConflict: "region,report_date" },
+      { report_date: reportDate, status: "pending", started_at: new Date().toISOString() },
+      { onConflict: "report_date" },
     )
     .select("id, retry_count")
     .single();
 
   const runId = runRow?.id as string | undefined;
 
-  const finish = async (result: Omit<IngestResult, "region" | "reportDate">) => {
+  const finish = async (result: Omit<IngestResult, "reportDate">) => {
     if (runId) {
       await supabaseAdmin
         .from("report_runs")
@@ -59,15 +52,14 @@ export async function ingestReport(reportDate: string, region: Region): Promise<
         })
         .eq("id", runId);
     }
-    return { region, reportDate, ...result };
+    return { reportDate, ...result };
   };
 
   try {
     const text = await fetchDailyReport(compactDate);
-    const all = parseReport(text, reportDate);
-    const rows = all.filter((r) => regionForCountry(r.countryCode) === region);
+    const rows = parseReport(text, reportDate);
 
-    // Clear any previous ingest for this region + date so re-runs never duplicate.
+    // Clear any previous ingest for this date so re-runs never duplicate.
     if (runId) {
       await supabaseAdmin.from("sales").delete().eq("report_run_id", runId);
       await supabaseAdmin.from("unmatched_sales").delete().eq("report_run_id", runId);
@@ -100,7 +92,6 @@ export async function ingestReport(reportDate: string, region: Region): Promise<
           item_id: match.id,
           sublabel_id: match.sublabel_id,
           sale_date: row.saleDate,
-          region,
           country_code: row.countryCode || null,
           units: row.units,
           original_currency: row.currency,
@@ -112,7 +103,6 @@ export async function ingestReport(reportDate: string, region: Region): Promise<
         unmatched.push({
           report_run_id: runId ?? null,
           sale_date: row.saleDate,
-          region,
           country_code: row.countryCode || null,
           title: row.title || null,
           artist_name: row.artistName || null,
