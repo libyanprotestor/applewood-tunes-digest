@@ -181,7 +181,7 @@ export const listUnmatched = createServerFn({ method: "GET" })
     await assertAdmin(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("unmatched_sales")
-      .select("id, sale_date, region, title, artist_name, isrc, upc, units, revenue_usd, country_code")
+      .select("id, sale_date, title, artist_name, isrc, upc, units, revenue_usd, country_code")
       .eq("resolved", false)
       .order("sale_date", { ascending: false })
       .limit(500);
@@ -217,7 +217,6 @@ export const assignUnmatched = createServerFn({ method: "POST" })
       item_id: item.id,
       sublabel_id: item.sublabel_id,
       sale_date: row.sale_date,
-      region: row.region,
       country_code: row.country_code,
       units: row.units,
       original_currency: row.original_currency,
@@ -251,20 +250,15 @@ export const listRuns = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-/** Manually pulls a report for a given date and region. */
+/** Manually pulls the report for a given date. */
 export const runReportFetch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z
-      .object({
-        reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        region: z.enum(["americas", "japan_anz", "europe_other"]),
-      })
-      .parse(input),
+    z.object({ reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(input),
   )
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
     const { ingestReport } = await import("./ingest.server");
-    return ingestReport(data.reportDate, data.region);
+    return ingestReport(data.reportDate);
   });

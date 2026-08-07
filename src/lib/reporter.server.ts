@@ -3,29 +3,6 @@ import { gunzipSync } from "node:zlib";
 export const REPORTER_SALES_ENDPOINT =
   "https://reportingitc-reporter.apple.com/reportservice/sales/v1";
 
-export type Region = "americas" | "japan_anz" | "europe_other";
-
-export const REGIONS: Region[] = ["americas", "japan_anz", "europe_other"];
-
-const AMERICAS = new Set([
-  "US","CA","MX","BR","AR","CL","CO","PE","VE","EC","UY","PY","BO","CR","PA","GT","HN","NI","SV",
-  "DO","JM","TT","BS","BB","BZ","GY","SR","AI","AG","AW","KY","DM","GD","HT","KN","LC","VC","MS",
-  "BM","VG","PR",
-]);
-const JAPAN_ANZ = new Set(["JP", "AU", "NZ"]);
-
-export function regionForCountry(code: string | undefined | null): Region {
-  const cc = (code ?? "").trim().toUpperCase();
-  if (AMERICAS.has(cc)) return "americas";
-  if (JAPAN_ANZ.has(cc)) return "japan_anz";
-  return "europe_other";
-}
-
-export const REGION_LABELS: Record<Region, string> = {
-  americas: "Americas",
-  japan_anz: "Japan / Australia / New Zealand",
-  europe_other: "Europe & rest of world",
-};
 
 export interface ReportRow {
   title: string;
