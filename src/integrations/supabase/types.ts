@@ -98,7 +98,6 @@ export type Database = {
           error_message: string | null
           finished_at: string | null
           id: string
-          region: string
           report_date: string
           retry_count: number
           revenue_usd: number
@@ -112,7 +111,6 @@ export type Database = {
           error_message?: string | null
           finished_at?: string | null
           id?: string
-          region: string
           report_date: string
           retry_count?: number
           revenue_usd?: number
@@ -126,7 +124,6 @@ export type Database = {
           error_message?: string | null
           finished_at?: string | null
           id?: string
-          region?: string
           report_date?: string
           retry_count?: number
           revenue_usd?: number
@@ -146,7 +143,6 @@ export type Database = {
           item_id: string
           original_currency: string | null
           product_type_id: string | null
-          region: string
           report_run_id: string | null
           revenue_usd: number
           sale_date: string
@@ -160,7 +156,6 @@ export type Database = {
           item_id: string
           original_currency?: string | null
           product_type_id?: string | null
-          region: string
           report_run_id?: string | null
           revenue_usd?: number
           sale_date: string
@@ -174,7 +169,6 @@ export type Database = {
           item_id?: string
           original_currency?: string | null
           product_type_id?: string | null
-          region?: string
           report_run_id?: string | null
           revenue_usd?: number
           sale_date?: string
@@ -237,7 +231,6 @@ export type Database = {
           isrc: string | null
           original_currency: string | null
           product_type_id: string | null
-          region: string
           report_run_id: string | null
           resolved: boolean
           revenue_usd: number
@@ -254,7 +247,6 @@ export type Database = {
           isrc?: string | null
           original_currency?: string | null
           product_type_id?: string | null
-          region: string
           report_run_id?: string | null
           resolved?: boolean
           revenue_usd?: number
@@ -271,7 +263,6 @@ export type Database = {
           isrc?: string | null
           original_currency?: string | null
           product_type_id?: string | null
-          region?: string
           report_run_id?: string | null
           resolved?: boolean
           revenue_usd?: number
