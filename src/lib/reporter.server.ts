@@ -37,7 +37,7 @@ export async function fetchDailyReport(dateYYYYMMDD: string): Promise<string> {
     accesstoken: accessToken,
     version: "2.2",
     mode: "Robot.XML",
-    queryInput: `[p=Reporter.properties, Sales.getReport, ${vendorId},Music,Detailed,Daily,${dateYYYYMMDD}]`,
+    queryInput: `[p=Reporter.properties, Sales.getReport, ${vendorId},Sales,Detailed,Daily,${dateYYYYMMDD}]`,
   };
 
   const res = await fetch(REPORTER_SALES_ENDPOINT, {
