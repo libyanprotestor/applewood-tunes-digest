@@ -80,7 +80,7 @@ function ReportsPage() {
                     : "bg-secondary text-secondary-foreground"
               }`}
             >
-              {r.status === "not_ready" ? "no sales" : r.status}
+              {r.status === "not_ready" ? (r.error_message?.toLowerCase().includes("no sales") ? "no_sales" : "not_ready") : r.status}
             </span>
           </div>
         ))}
