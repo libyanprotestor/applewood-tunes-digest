@@ -80,7 +80,7 @@ function ReportsPage() {
                     : "bg-secondary text-secondary-foreground"
               }`}
             >
-              {r.status}
+              {r.status === "not_ready" ? "no sales" : r.status}
             </span>
           </div>
         ))}
