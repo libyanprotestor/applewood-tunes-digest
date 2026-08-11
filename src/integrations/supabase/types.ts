@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          created_at: string
+          id: boolean
+          stream_rate_per_1000: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: boolean
+          stream_rate_per_1000?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: boolean
+          stream_rate_per_1000?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       items: {
         Row: {
           artist_name: string | null
@@ -98,6 +119,7 @@ export type Database = {
           error_message: string | null
           finished_at: string | null
           id: string
+          kind: string
           report_date: string
           retry_count: number
           revenue_usd: number
@@ -111,6 +133,7 @@ export type Database = {
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          kind?: string
           report_date: string
           retry_count?: number
           revenue_usd?: number
@@ -124,6 +147,7 @@ export type Database = {
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          kind?: string
           report_date?: string
           retry_count?: number
           revenue_usd?: number
@@ -185,6 +209,106 @@ export type Database = {
           },
           {
             foreignKeyName: "sales_sublabel_id_fkey"
+            columns: ["sublabel_id"]
+            isOneToOne: false
+            referencedRelation: "sublabels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      streams: {
+        Row: {
+          apple_identifier: string | null
+          audio_format: string | null
+          channel_partner: string | null
+          container_id: string | null
+          container_name: string | null
+          container_sub_type: string | null
+          container_type: string | null
+          created_at: string
+          device_type: string | null
+          end_reason_type: string | null
+          id: string
+          ingest_date: string | null
+          item_id: string
+          offline: string | null
+          report_run_id: string | null
+          source_of_stream: string | null
+          storefront_name: string | null
+          stream_date: string
+          streams: number
+          sublabel_id: string
+          subscription_mode: string | null
+          subscription_type: string | null
+          time_bucket: string | null
+        }
+        Insert: {
+          apple_identifier?: string | null
+          audio_format?: string | null
+          channel_partner?: string | null
+          container_id?: string | null
+          container_name?: string | null
+          container_sub_type?: string | null
+          container_type?: string | null
+          created_at?: string
+          device_type?: string | null
+          end_reason_type?: string | null
+          id?: string
+          ingest_date?: string | null
+          item_id: string
+          offline?: string | null
+          report_run_id?: string | null
+          source_of_stream?: string | null
+          storefront_name?: string | null
+          stream_date: string
+          streams?: number
+          sublabel_id: string
+          subscription_mode?: string | null
+          subscription_type?: string | null
+          time_bucket?: string | null
+        }
+        Update: {
+          apple_identifier?: string | null
+          audio_format?: string | null
+          channel_partner?: string | null
+          container_id?: string | null
+          container_name?: string | null
+          container_sub_type?: string | null
+          container_type?: string | null
+          created_at?: string
+          device_type?: string | null
+          end_reason_type?: string | null
+          id?: string
+          ingest_date?: string | null
+          item_id?: string
+          offline?: string | null
+          report_run_id?: string | null
+          source_of_stream?: string | null
+          storefront_name?: string | null
+          stream_date?: string
+          streams?: number
+          sublabel_id?: string
+          subscription_mode?: string | null
+          subscription_type?: string | null
+          time_bucket?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "streams_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "streams_report_run_id_fkey"
+            columns: ["report_run_id"]
+            isOneToOne: false
+            referencedRelation: "report_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "streams_sublabel_id_fkey"
             columns: ["sublabel_id"]
             isOneToOne: false
             referencedRelation: "sublabels"
@@ -281,6 +405,89 @@ export type Database = {
           },
         ]
       }
+      unmatched_streams: {
+        Row: {
+          apple_identifier: string | null
+          audio_format: string | null
+          channel_partner: string | null
+          container_id: string | null
+          container_name: string | null
+          container_sub_type: string | null
+          container_type: string | null
+          created_at: string
+          device_type: string | null
+          end_reason_type: string | null
+          id: string
+          ingest_date: string | null
+          offline: string | null
+          report_run_id: string | null
+          resolved: boolean
+          source_of_stream: string | null
+          storefront_name: string | null
+          stream_date: string
+          streams: number
+          subscription_mode: string | null
+          subscription_type: string | null
+          time_bucket: string | null
+        }
+        Insert: {
+          apple_identifier?: string | null
+          audio_format?: string | null
+          channel_partner?: string | null
+          container_id?: string | null
+          container_name?: string | null
+          container_sub_type?: string | null
+          container_type?: string | null
+          created_at?: string
+          device_type?: string | null
+          end_reason_type?: string | null
+          id?: string
+          ingest_date?: string | null
+          offline?: string | null
+          report_run_id?: string | null
+          resolved?: boolean
+          source_of_stream?: string | null
+          storefront_name?: string | null
+          stream_date: string
+          streams?: number
+          subscription_mode?: string | null
+          subscription_type?: string | null
+          time_bucket?: string | null
+        }
+        Update: {
+          apple_identifier?: string | null
+          audio_format?: string | null
+          channel_partner?: string | null
+          container_id?: string | null
+          container_name?: string | null
+          container_sub_type?: string | null
+          container_type?: string | null
+          created_at?: string
+          device_type?: string | null
+          end_reason_type?: string | null
+          id?: string
+          ingest_date?: string | null
+          offline?: string | null
+          report_run_id?: string | null
+          resolved?: boolean
+          source_of_stream?: string | null
+          storefront_name?: string | null
+          stream_date?: string
+          streams?: number
+          subscription_mode?: string | null
+          subscription_type?: string | null
+          time_bucket?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unmatched_streams_report_run_id_fkey"
+            columns: ["report_run_id"]
+            isOneToOne: false
+            referencedRelation: "report_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -326,6 +533,19 @@ export type Database = {
           bucket: string
           revenue_usd: number
           units: number
+        }[]
+      }
+      streams_summary: {
+        Args: {
+          _bucket: string
+          _from: string
+          _sublabel?: string
+          _to: string
+        }
+        Returns: {
+          bucket: string
+          revenue_usd: number
+          streams: number
         }[]
       }
     }
