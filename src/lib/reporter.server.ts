@@ -127,3 +127,99 @@ export function parseReport(text: string, fallbackDate: string): ReportRow[] {
   }
   return rows;
 }
+
+/* --------------------------- Apple Music streams ---------------------------- */
+
+export interface StreamRow {
+  streamDate: string;
+  ingestDate: string | null;
+  appleIdentifier: string;
+  storefrontName: string;
+  timeBucket: string;
+  subscriptionType: string;
+  subscriptionMode: string;
+  channelPartner: string;
+  deviceType: string;
+  sourceOfStream: string;
+  containerType: string;
+  containerSubType: string;
+  containerId: string;
+  containerName: string;
+  endReasonType: string;
+  offline: string;
+  audioFormat: string;
+  streams: number;
+}
+
+/**
+ * Apple Music streaming detail report:
+ * Sales.getReport <vendor>, Music, Detailed, Daily, YYYYMMDD, 1_0
+ */
+export async function fetchStreamsReport(dateYYYYMMDD: string): Promise<string> {
+  const { accessToken, vendorId } = credentials();
+  const jsonRequest = {
+    accesstoken: accessToken,
+    version: "2.2",
+    mode: "Robot.XML",
+    queryInput: `[p=Reporter.properties, Sales.getReport, ${vendorId},Music,Detailed,Daily,${dateYYYYMMDD},1_0]`,
+  };
+
+  const res = await fetch(REPORTER_SALES_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "*/*" },
+    body: `jsonRequest=${encodeURIComponent(JSON.stringify(jsonRequest))}`,
+  });
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const isGzip = buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
+  if (!isGzip) {
+    const text = buffer.toString("utf8");
+    const code = text.match(/<Code>(\d+)<\/Code>/)?.[1];
+    const message = text.match(/<Message>([^<]*)<\/Message>/)?.[1] ?? text.slice(0, 300);
+    if (code === "213" || /not available|no reports/i.test(message)) {
+      throw new ReportNotReadyError(message);
+    }
+    throw new Error(`Apple Reporter error (${res.status}${code ? `/${code}` : ""}): ${message}`);
+  }
+  return gunzipSync(buffer).toString("utf8");
+}
+
+/** Parses the tab-separated Apple Music streaming report. */
+export function parseStreamsReport(text: string, fallbackDate: string): StreamRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+  const header = lines[0]!.split("\t").map((h) => h.trim().toLowerCase());
+
+  const rows: StreamRow[] = [];
+  for (const line of lines.slice(1)) {
+    const cols = line.split("\t");
+    if (cols.length < 3) continue;
+
+    const streams = num(pick(header, cols, "streams", "quantity", "units"));
+    if (!streams) continue;
+
+    const ingest = pick(header, cols, "ingest datestamp");
+
+    rows.push({
+      streamDate: normalizeDate(pick(header, cols, "datestamp", "begin date"), fallbackDate),
+      ingestDate: ingest ? normalizeDate(ingest, fallbackDate) : null,
+      appleIdentifier: pick(header, cols, "apple identifier", "isrc", "upc").toUpperCase(),
+      storefrontName: pick(header, cols, "storefront name", "storefront"),
+      timeBucket: pick(header, cols, "time bucket"),
+      subscriptionType: pick(header, cols, "subscription type"),
+      subscriptionMode: pick(header, cols, "subscription mode"),
+      channelPartner: pick(header, cols, "channel partner"),
+      deviceType: pick(header, cols, "device type"),
+      sourceOfStream: pick(header, cols, "source of stream"),
+      containerType: pick(header, cols, "container type"),
+      containerSubType: pick(header, cols, "container sub-type", "container subtype"),
+      containerId: pick(header, cols, "container id"),
+      containerName: pick(header, cols, "container name"),
+      endReasonType: pick(header, cols, "end reason type"),
+      offline: pick(header, cols, "offline"),
+      audioFormat: pick(header, cols, "audio format"),
+      streams,
+    });
+  }
+  return rows;
+}
