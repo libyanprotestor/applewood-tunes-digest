@@ -11,7 +11,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getBreakdown, getSalesSummary, getViewer } from "@/lib/analytics.functions";
+import {
+  getBreakdown,
+  getSalesSummary,
+  getStreamsBreakdown,
+  getStreamsSummary,
+  getViewer,
+} from "@/lib/analytics.functions";
 import { listSublabels } from "@/lib/admin.functions";
 import {
   Select,
@@ -92,6 +98,23 @@ function Dashboard() {
     queryFn: () => breakdownFn({ data: { ...range, sublabelId: scoped } }),
   });
 
+  const streamsSummaryFn = useServerFn(getStreamsSummary);
+  const streamsBreakdownFn = useServerFn(getStreamsBreakdown);
+
+  const streamsSummary = useQuery({
+    queryKey: ["streams-summary", bucket, scoped, range.from],
+    queryFn: () => streamsSummaryFn({ data: { ...range, bucket, sublabelId: scoped } }),
+  });
+
+  const streamsBreakdown = useQuery({
+    queryKey: ["streams-breakdown", scoped, range.from],
+    queryFn: () => streamsBreakdownFn({ data: { ...range, sublabelId: scoped } }),
+  });
+
+  const streamsByBucket = new Map(
+    (streamsSummary.data ?? []).map((row) => [row.bucket.slice(0, 10), Number(row.streams)]),
+  );
+
   const chartData = (summary.data ?? []).map((row) => ({
     label: row.bucket.slice(0, 10),
     revenue: Number(row.revenue_usd),
@@ -148,6 +171,20 @@ function Dashboard() {
         <Stat
           label="Catalog items with sales"
           value={num.format(breakdown.data?.topItems.length ?? 0)}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
+        <Stat label="Streams" value={num.format(streamsBreakdown.data?.totalStreams ?? 0)} />
+        <Stat
+          label="Stream revenue (USD)"
+          value={usd.format(streamsBreakdown.data?.totalRevenue ?? 0)}
+        />
+        <Stat
+          label="Total revenue (USD)"
+          value={usd.format(
+            (breakdown.data?.totalRevenue ?? 0) + (streamsBreakdown.data?.totalRevenue ?? 0),
+          )}
         />
       </div>
 
@@ -209,6 +246,35 @@ function Dashboard() {
                     </p>
                   </div>
                   <span className="ml-4 shrink-0 text-sm tabular-nums">{usd.format(item.revenue)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel
+          title={`Top streamed items${
+            streamsBreakdown.data ? ` · $${streamsBreakdown.data.ratePer1000}/1,000 streams` : ""
+          }`}
+        >
+          {(streamsBreakdown.data?.topItems ?? []).length === 0 ? (
+            <Empty />
+          ) : (
+            <ul className="divide-y divide-border">
+              {streamsBreakdown.data?.topItems.map((item) => (
+                <li
+                  key={`s-${item.title}-${item.artist}`}
+                  className="flex items-center justify-between py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{item.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {item.artist || "—"} · {num.format(item.streams)} streams
+                    </p>
+                  </div>
+                  <span className="ml-4 shrink-0 text-sm tabular-nums">
+                    {usd.format(item.revenue)}
+                  </span>
                 </li>
               ))}
             </ul>

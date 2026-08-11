@@ -20,6 +20,7 @@ export const Route = createFileRoute("/api/public/hooks/apple-reports")({
         }
 
         const { ingestReport } = await import("@/lib/ingest.server");
+        const { ingestStreams } = await import("@/lib/ingest-streams.server");
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         // Yesterday, plus any earlier day in the last week that never succeeded.
@@ -33,15 +34,17 @@ export const Route = createFileRoute("/api/public/hooks/apple-reports")({
 
         const { data: done } = await supabaseAdmin
           .from("report_runs")
-          .select("report_date")
+          .select("report_date, kind")
           .eq("status", "success")
           .in("report_date", dates);
-        const succeeded = new Set((done ?? []).map((r) => r.report_date as string));
+        const succeeded = new Set(
+          (done ?? []).map((r) => `${r.report_date as string}:${(r as { kind?: string }).kind ?? "sales"}`),
+        );
 
         const results = [];
         for (const date of dates) {
-          if (succeeded.has(date)) continue;
-          results.push(await ingestReport(date));
+          if (!succeeded.has(`${date}:sales`)) results.push(await ingestReport(date));
+          if (!succeeded.has(`${date}:streams`)) results.push(await ingestStreams(date));
         }
 
         return new Response(JSON.stringify({ results }), {

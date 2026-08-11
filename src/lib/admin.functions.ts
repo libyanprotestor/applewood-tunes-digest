@@ -284,3 +284,99 @@ export const runReportFetch = createServerFn({ method: "POST" })
     const { ingestReport } = await import("./ingest.server");
     return ingestReport(data.reportDate);
   });
+
+/* ---------------------------------- streams ----------------------------------- */
+
+/** Manually pulls the Apple Music streaming report for a given date. */
+export const runStreamsFetch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+    const { ingestStreams } = await import("./ingest-streams.server");
+    return ingestStreams(data.reportDate);
+  });
+
+/** Revenue paid per 1000 streams. */
+export const getStreamRate = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("app_settings")
+      .select("stream_rate_per_1000")
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return { ratePer1000: Number(data?.stream_rate_per_1000 ?? 1) };
+  });
+
+export const setStreamRate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ ratePer1000: z.number().min(0).max(10000) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+    const { error } = await context.supabase
+      .from("app_settings")
+      .upsert({ id: true, stream_rate_per_1000: data.ratePer1000 }, { onConflict: "id" });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const listUnmatchedStreams = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+    const { data, error } = await context.supabase
+      .from("unmatched_streams")
+      .select("id, stream_date, apple_identifier, container_name, storefront_name, streams")
+      .eq("resolved", false)
+      .order("stream_date", { ascending: false })
+      .limit(500);
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
+
+/** Assigns an unmatched streaming line to a catalog item. */
+export const assignUnmatchedStream = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ unmatchedId: z.string().uuid(), itemId: z.string().uuid() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: row, error: rowError } = await context.supabase
+      .from("unmatched_streams")
+      .select("*")
+      .eq("id", data.unmatchedId)
+      .single();
+    if (rowError) throw new Error(rowError.message);
+
+    const { data: item, error: itemError } = await context.supabase
+      .from("items")
+      .select("id, sublabel_id")
+      .eq("id", data.itemId)
+      .single();
+    if (itemError) throw new Error(itemError.message);
+
+    const { id: _id, resolved: _resolved, created_at: _createdAt, ...rest } = row;
+    const { error: insertError } = await context.supabase
+      .from("streams")
+      .insert({ ...rest, item_id: item.id, sublabel_id: item.sublabel_id });
+    if (insertError) throw new Error(insertError.message);
+
+    const { error: updateError } = await context.supabase
+      .from("unmatched_streams")
+      .update({ resolved: true })
+      .eq("id", data.unmatchedId);
+    if (updateError) throw new Error(updateError.message);
+    return { ok: true };
+  });
