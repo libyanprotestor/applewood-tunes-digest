@@ -27,11 +27,17 @@ export async function ingestReport(reportDate: string): Promise<IngestResult> {
   const { data: runRow } = await supabaseAdmin
     .from("report_runs")
     .upsert(
-      { report_date: reportDate, status: "pending", started_at: new Date().toISOString() },
-      { onConflict: "report_date" },
+      {
+        report_date: reportDate,
+        kind: "sales",
+        status: "pending",
+        started_at: new Date().toISOString(),
+      },
+      { onConflict: "report_date,kind" },
     )
     .select("id, retry_count")
     .single();
+
 
   const runId = runRow?.id as string | undefined;
 
