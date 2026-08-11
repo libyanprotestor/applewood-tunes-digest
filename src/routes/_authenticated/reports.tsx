@@ -1,9 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { listRuns, runReportFetch } from "@/lib/admin.functions";
+import {
+  getStreamRate,
+  listRuns,
+  runReportFetch,
+  runStreamsFetch,
+  setStreamRate,
+} from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,9 +18,9 @@ export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({
     meta: [
       { title: "Report runs | Apple Music Sales Dashboard" },
-      { name: "description", content: "History of daily Apple Music report fetches and manual re-runs." },
+      { name: "description", content: "History of daily Apple Music sales and streaming report fetches." },
       { property: "og:title", content: "Report runs | Apple Music Sales Dashboard" },
-      { property: "og:description", content: "History of daily Apple Music report fetches and manual re-runs." },
+      { property: "og:description", content: "History of daily Apple Music sales and streaming report fetches." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -26,15 +32,43 @@ function ReportsPage() {
   const qc = useQueryClient();
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   const [date, setDate] = useState(yesterday);
+  const [rate, setRate] = useState("1");
 
   const runs = useQuery({ queryKey: ["runs"], queryFn: useServerFn(listRuns) });
-  const runFn = useServerFn(runReportFetch);
+  const rateQuery = useQuery({ queryKey: ["stream-rate"], queryFn: useServerFn(getStreamRate) });
+  const salesFn = useServerFn(runReportFetch);
+  const streamsFn = useServerFn(runStreamsFetch);
+  const saveRateFn = useServerFn(setStreamRate);
 
-  const run = useMutation({
-    mutationFn: () => runFn({ data: { reportDate: date } }),
+  useEffect(() => {
+    if (rateQuery.data) setRate(String(rateQuery.data.ratePer1000));
+  }, [rateQuery.data]);
+
+  const runSales = useMutation({
+    mutationFn: () => salesFn({ data: { reportDate: date } }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["runs"] });
-      toast.success("Fetch finished");
+      toast.success("Sales fetch finished");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const runStreams = useMutation({
+    mutationFn: () => streamsFn({ data: { reportDate: date } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["runs"] });
+      toast.success("Streams fetch finished");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveRate = useMutation({
+    mutationFn: () => saveRateFn({ data: { ratePer1000: Number(rate) } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["stream-rate"] });
+      void qc.invalidateQueries({ queryKey: ["streams-summary"] });
+      void qc.invalidateQueries({ queryKey: ["streams-breakdown"] });
+      toast.success("Stream rate updated");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -43,8 +77,8 @@ function ReportsPage() {
     <main className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="text-3xl font-semibold tracking-tight">Report runs</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        One report covering all territories is fetched automatically each day. You can also re-run a
-        specific date.
+        Sales and Apple Music streaming reports covering all territories are fetched automatically
+        each day. You can also re-run a specific date.
       </p>
 
       <div className="mt-8 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-6">
@@ -52,9 +86,37 @@ function ReportsPage() {
           <Label htmlFor="date">Report date</Label>
           <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
-        <Button onClick={() => run.mutate()} disabled={run.isPending}>
-          {run.isPending ? "Fetching…" : "Fetch now"}
+        <Button onClick={() => runSales.mutate()} disabled={runSales.isPending}>
+          {runSales.isPending ? "Fetching…" : "Fetch sales"}
         </Button>
+        <Button
+          variant="secondary"
+          onClick={() => runStreams.mutate()}
+          disabled={runStreams.isPending}
+        >
+          {runStreams.isPending ? "Fetching…" : "Fetch streams"}
+        </Button>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-6">
+        <div className="space-y-2">
+          <Label htmlFor="rate">Revenue per 1,000 streams (USD)</Label>
+          <Input
+            id="rate"
+            type="number"
+            step="0.01"
+            min="0"
+            className="w-40"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+          />
+        </div>
+        <Button variant="outline" onClick={() => saveRate.mutate()} disabled={saveRate.isPending}>
+          Save rate
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Applies to every stream, past and future — revenue is calculated from this rate.
+        </p>
       </div>
 
       <div className="mt-8 divide-y divide-border rounded-2xl border border-border bg-card">
@@ -64,8 +126,12 @@ function ReportsPage() {
         {(runs.data ?? []).map((r) => (
           <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div>
-              <p className="text-sm font-medium">{r.report_date}</p>
-
+              <p className="text-sm font-medium">
+                {r.report_date}
+                <span className="ml-2 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
+                  {r.kind === "streams" ? "streams" : "sales"}
+                </span>
+              </p>
               <p className="text-xs text-muted-foreground">
                 {r.rows_matched ?? 0} matched · {r.rows_unmatched ?? 0} unmatched
                 {r.error_message ? ` · ${r.error_message}` : ""}
@@ -80,7 +146,11 @@ function ReportsPage() {
                     : "bg-secondary text-secondary-foreground"
               }`}
             >
-              {r.status === "not_ready" ? (r.error_message?.toLowerCase().includes("no sales") ? "no_sales" : "not_ready") : r.status}
+              {r.status === "not_ready"
+                ? r.error_message?.toLowerCase().includes("no sales")
+                  ? "no_sales"
+                  : "not_ready"
+                : r.status}
             </span>
           </div>
         ))}
