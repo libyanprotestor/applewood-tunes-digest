@@ -3,7 +3,13 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { assignUnmatched, listItems, listUnmatched } from "@/lib/admin.functions";
+import {
+  assignUnmatched,
+  assignUnmatchedStream,
+  listItems,
+  listUnmatched,
+  listUnmatchedStreams,
+} from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -35,6 +41,23 @@ function UnmatchedPage() {
   const listFn = useServerFn(listItems);
   const items = useQuery({ queryKey: ["items", "all"], queryFn: () => listFn({ data: {} }) });
   const assignFn = useServerFn(assignUnmatched);
+
+  const streamRows = useQuery({
+    queryKey: ["unmatched-streams"],
+    queryFn: useServerFn(listUnmatchedStreams),
+  });
+  const assignStreamFn = useServerFn(assignUnmatchedStream);
+  const [pickedStream, setPickedStream] = useState<Record<string, string>>({});
+
+  const assignStream = useMutation({
+    mutationFn: (unmatchedId: string) =>
+      assignStreamFn({ data: { unmatchedId, itemId: pickedStream[unmatchedId]! } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["unmatched-streams"] });
+      toast.success("Streams moved to the item");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const assign = useMutation({
     mutationFn: (unmatchedId: string) =>
