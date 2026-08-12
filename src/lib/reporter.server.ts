@@ -153,7 +153,7 @@ export interface StreamRow {
 
 /**
  * Apple Music streaming detail report:
- * Sales.getReport <vendor>, Music, Detailed, Daily, YYYYMMDD, 1_0
+ * Sales.getReport <vendor>, amStreams, Detailed, Daily, YYYYMMDD, 1_0
  */
 export async function fetchStreamsReport(dateYYYYMMDD: string): Promise<string> {
   const { accessToken, vendorId } = credentials();
@@ -161,7 +161,7 @@ export async function fetchStreamsReport(dateYYYYMMDD: string): Promise<string> 
     accesstoken: accessToken,
     version: "2.2",
     mode: "Robot.XML",
-    queryInput: `[p=Reporter.properties, Sales.getReport, ${vendorId},Music,Detailed,Daily,${dateYYYYMMDD},1_0]`,
+    queryInput: `[p=Reporter.properties, Sales.getReport, ${vendorId},amStreams,Detailed,Daily,${dateYYYYMMDD},1_0]`,
   };
 
   const res = await fetch(REPORTER_SALES_ENDPOINT, {
