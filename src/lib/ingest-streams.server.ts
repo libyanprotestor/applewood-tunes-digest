@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchStreamsReport, parseStreamsReport, ReportNotReadyError } from "./reporter.server";
 
 export interface StreamIngestResult {
@@ -19,8 +20,11 @@ function compact(value: string): string {
  * catalog item by Apple Identifier (ISRC or UPC) and stores the stream counts.
  * Re-running the same date replaces the previous rows.
  */
-export async function ingestStreams(reportDate: string): Promise<StreamIngestResult> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+export async function ingestStreams(reportDate: string, db?: SupabaseClient): Promise<StreamIngestResult> {
+  // Use the caller's client when provided (e.g. an authenticated admin), so the
+  // service-role key is only required for unattended/cron runs.
+  const supabaseAdmin: SupabaseClient =
+    db ?? (await import("@/integrations/supabase/client.server")).supabaseAdmin;
   const compactDate = reportDate.replace(/-/g, "");
 
   const { data: runRow } = await supabaseAdmin
