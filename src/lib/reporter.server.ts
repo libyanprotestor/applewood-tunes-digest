@@ -19,6 +19,44 @@ export interface ReportRow {
 
 export class ReportNotReadyError extends Error {}
 
+/** Apple error codes that simply mean "nothing published for that date". */
+const NO_REPORT_CODES = new Set(["213", "220"]);
+
+function isNoReport(code: string | undefined, message: string): boolean {
+  return (
+    (code !== undefined && NO_REPORT_CODES.has(code)) ||
+    /not available|no report|no sales|there were no/i.test(message)
+  );
+}
+
+/**
+ * Apple's Reporter endpoint frequently drops connections mid-download
+ * ("terminated" / socket errors). Retry a few times with a hard timeout so a
+ * run never hangs forever in "pending".
+ */
+async function postReporter(jsonRequest: Record<string, string>): Promise<Buffer> {
+  const body = `jsonRequest=${encodeURIComponent(JSON.stringify(jsonRequest))}`;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const res = await fetch(REPORTER_SALES_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "*/*" },
+        body,
+        signal: AbortSignal.timeout(120_000),
+      });
+      return Buffer.from(await res.arrayBuffer());
+    } catch (error) {
+      lastError = error;
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+    }
+  }
+
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Could not reach Apple Reporter after 3 attempts: ${message}`);
+}
+
 function credentials() {
   const accessToken = process.env["APPLE_REPORTER_ACCESS_TOKEN"];
   const vendorId = process.env["APPLE_VENDOR_ID"];
