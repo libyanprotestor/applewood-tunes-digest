@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchDailyReport, parseReport, ReportNotReadyError } from "./reporter.server";
 import { toUsd, warmRates } from "./fx.server";
 
@@ -20,8 +21,11 @@ function compact(value: string): string {
  * converts revenue to USD, and stores matched / unmatched sales.
  * Re-running the same date replaces the previous rows.
  */
-export async function ingestReport(reportDate: string): Promise<IngestResult> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+export async function ingestReport(reportDate: string, db?: SupabaseClient): Promise<IngestResult> {
+  // Use the caller's client when provided (e.g. an authenticated admin), so the
+  // service-role key is only required for unattended/cron runs.
+  const supabaseAdmin: SupabaseClient =
+    db ?? (await import("@/integrations/supabase/client.server")).supabaseAdmin;
   const compactDate = reportDate.replace(/-/g, "");
 
   const { data: runRow } = await supabaseAdmin

@@ -282,7 +282,7 @@ export const runReportFetch = createServerFn({ method: "POST" })
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
     const { ingestReport } = await import("./ingest.server");
-    return ingestReport(data.reportDate);
+    return ingestReport(data.reportDate, context.supabase);
   });
 
 /* ---------------------------------- streams ----------------------------------- */
@@ -297,7 +297,7 @@ export const runStreamsFetch = createServerFn({ method: "POST" })
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
     const { ingestStreams } = await import("./ingest-streams.server");
-    return ingestStreams(data.reportDate);
+    return ingestStreams(data.reportDate, context.supabase);
   });
 
 /** Revenue paid per 1000 streams. */
