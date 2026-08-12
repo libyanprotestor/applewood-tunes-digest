@@ -181,7 +181,15 @@ export async function fetchStreamsReport(dateYYYYMMDD: string): Promise<string> 
     }
     throw new Error(`Apple Reporter error (${res.status}${code ? `/${code}` : ""}): ${message}`);
   }
-  return gunzipSync(buffer).toString("utf8");
+  // Streams reports are double-compressed: the outer gzip contains another
+  // gzip archive, so keep decompressing while the payload still looks gzipped.
+  let payload = gunzipSync(buffer);
+  let guard = 0;
+  while (payload.length > 2 && payload[0] === 0x1f && payload[1] === 0x8b && guard < 5) {
+    payload = gunzipSync(payload);
+    guard += 1;
+  }
+  return payload.toString("utf8");
 }
 
 /** Parses the tab-separated Apple Music streaming report. */
