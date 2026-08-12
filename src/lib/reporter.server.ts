@@ -161,7 +161,7 @@ export async function fetchStreamsReport(dateYYYYMMDD: string): Promise<string> 
     accesstoken: accessToken,
     version: "2.2",
     mode: "Robot.XML",
-    queryInput: `[p=Reporter.properties, Sales.getReport, ${vendorId},amStreams,Detailed,Daily,${dateYYYYMMDD},1_3]`,
+    queryInput: `[p=Reporter.properties, Sales.getReport, ${vendorId},amStreams,Summary,Daily,${dateYYYYMMDD},1_3]`,
   };
 
   const res = await fetch(REPORTER_SALES_ENDPOINT, {
