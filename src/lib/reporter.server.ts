@@ -1,4 +1,36 @@
 import { gunzipSync } from "node:zlib";
+import { unzipSync } from "fflate";
+
+const isGzipBuffer = (b: Buffer) => b.length > 2 && b[0] === 0x1f && b[1] === 0x8b;
+const isZipBuffer = (b: Buffer) => b.length > 4 && b[0] === 0x50 && b[1] === 0x4b;
+
+/**
+ * Apple Reporter payloads can be gzip, a ZIP archive, or a ZIP archive whose
+ * entries are themselves compressed (streams reports nest a second archive
+ * inside a file named *.txt). Keep unwrapping layers until plain text remains.
+ */
+function extractReportText(buffer: Buffer, depth = 0): string {
+  if (depth > 6) return buffer.toString("utf8");
+
+  if (isGzipBuffer(buffer)) {
+    return extractReportText(Buffer.from(gunzipSync(buffer)), depth + 1);
+  }
+
+  if (isZipBuffer(buffer)) {
+    const entries = unzipSync(new Uint8Array(buffer));
+    const names = Object.keys(entries).filter((n) => !n.endsWith("/"));
+    // Prefer the biggest entry — Apple archives contain a single report file.
+    names.sort((a, b) => (entries[b]?.length ?? 0) - (entries[a]?.length ?? 0));
+    for (const name of names) {
+      const inner = Buffer.from(entries[name]!);
+      const text = extractReportText(inner, depth + 1);
+      if (text.includes("\t")) return text;
+    }
+    return "";
+  }
+
+  return buffer.toString("utf8");
+}
 
 export const REPORTER_SALES_ENDPOINT =
   "https://reportingitc-reporter.apple.com/reportservice/sales/v1";
