@@ -61,6 +61,16 @@ function isNoReport(code: string | undefined, message: string): boolean {
   );
 }
 
+/** Raises for Apple's XML error payloads; archives pass through untouched. */
+function assertNoReporterError(buffer: Buffer): void {
+  if (isGzipBuffer(buffer) || isZipBuffer(buffer)) return;
+  const text = buffer.toString("utf8");
+  const code = text.match(/<Code>(\d+)<\/Code>/)?.[1];
+  const message = text.match(/<Message>([^<]*)<\/Message>/)?.[1] ?? text.slice(0, 300);
+  if (isNoReport(code, message)) throw new ReportNotReadyError(message);
+  throw new Error(`Apple Reporter error${code ? ` (${code})` : ""}: ${message}`);
+}
+
 /**
  * Apple's Reporter endpoint frequently drops connections mid-download
  * ("terminated" / socket errors). Retry a few times with a hard timeout so a
