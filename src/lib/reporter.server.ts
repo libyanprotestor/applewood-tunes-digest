@@ -111,18 +111,8 @@ export async function fetchDailyReport(dateYYYYMMDD: string): Promise<string> {
   };
 
   const buffer = await postReporter(jsonRequest);
-  const isGzip = buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
-
-  if (!isGzip) {
-    const text = buffer.toString("utf8");
-    const code = text.match(/<Code>(\d+)<\/Code>/)?.[1];
-    const message = text.match(/<Message>([^<]*)<\/Message>/)?.[1] ?? text.slice(0, 300);
-    if (isNoReport(code, message)) throw new ReportNotReadyError(message);
-    throw new Error(`Apple Reporter error${code ? ` (${code})` : ""}: ${message}`);
-  }
-
-  return gunzipSync(buffer).toString("utf8");
-
+  assertNoReporterError(buffer);
+  return extractReportText(buffer);
 }
 
 function num(value: string | undefined): number {
