@@ -65,6 +65,23 @@ export async function ingestStreams(reportDate: string, db?: SupabaseClient): Pr
     return { reportDate, ...result };
   };
 
+  const insertAll = async (table: string, rows: Record<string, unknown>[]) => {
+    for (let i = 0; i < rows.length; i += 1000) {
+      const chunk = rows.slice(i, i + 1000);
+      let lastError = "";
+      let ok = false;
+      for (let attempt = 0; attempt < 3 && !ok; attempt += 1) {
+        const { error } = await supabaseAdmin.from(table).insert(chunk as never);
+        if (!error) ok = true;
+        else {
+          lastError = error.message;
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        }
+      }
+      if (!ok) throw new Error(`Failed to store ${table} rows: ${lastError}`);
+    }
+  };
+
   try {
     const text = await fetchStreamsReport(compactDate);
     const rows = parseStreamsReport(text, reportDate);
@@ -72,6 +89,17 @@ export async function ingestStreams(reportDate: string, db?: SupabaseClient): Pr
     if (runId) {
       await supabaseAdmin.from("streams").delete().eq("report_run_id", runId);
       await supabaseAdmin.from("unmatched_streams").delete().eq("report_run_id", runId);
+    }
+
+    if (rows.length === 0) {
+      return finish({
+        status: "success",
+        rowsParsed: 0,
+        rowsMatched: 0,
+        rowsUnmatched: 0,
+        streams: 0,
+        error: "No streams reported for this date.",
+      });
     }
 
     const { data: items } = await supabaseAdmin.from("items").select("id, sublabel_id, isrc, upc");
@@ -114,16 +142,8 @@ export async function ingestStreams(reportDate: string, db?: SupabaseClient): Pr
       else unmatched.push(shared);
     }
 
-    for (let i = 0; i < matched.length; i += 500) {
-      const { error } = await supabaseAdmin.from("streams").insert(matched.slice(i, i + 500) as never);
-      if (error) throw new Error(error.message);
-    }
-    for (let i = 0; i < unmatched.length; i += 500) {
-      const { error } = await supabaseAdmin
-        .from("unmatched_streams")
-        .insert(unmatched.slice(i, i + 500) as never);
-      if (error) throw new Error(error.message);
-    }
+    await insertAll("streams", matched);
+    await insertAll("unmatched_streams", unmatched);
 
     return finish({
       status: "success",
@@ -144,3 +164,4 @@ export async function ingestStreams(reportDate: string, db?: SupabaseClient): Pr
     });
   }
 }
+
