@@ -1,4 +1,36 @@
 import { gunzipSync } from "node:zlib";
+import { unzipSync } from "fflate";
+
+const isGzipBuffer = (b: Buffer) => b.length > 2 && b[0] === 0x1f && b[1] === 0x8b;
+const isZipBuffer = (b: Buffer) => b.length > 4 && b[0] === 0x50 && b[1] === 0x4b;
+
+/**
+ * Apple Reporter payloads can be gzip, a ZIP archive, or a ZIP archive whose
+ * entries are themselves compressed (streams reports nest a second archive
+ * inside a file named *.txt). Keep unwrapping layers until plain text remains.
+ */
+export function extractReportText(buffer: Buffer, depth = 0): string {
+  if (depth > 6) return buffer.toString("utf8");
+
+  if (isGzipBuffer(buffer)) {
+    return extractReportText(Buffer.from(gunzipSync(buffer)), depth + 1);
+  }
+
+  if (isZipBuffer(buffer)) {
+    const entries = unzipSync(new Uint8Array(buffer));
+    const names = Object.keys(entries).filter((n) => !n.endsWith("/"));
+    // Prefer the biggest entry — Apple archives contain a single report file.
+    names.sort((a, b) => (entries[b]?.length ?? 0) - (entries[a]?.length ?? 0));
+    for (const name of names) {
+      const inner = Buffer.from(entries[name]!);
+      const text = extractReportText(inner, depth + 1);
+      if (text.includes("\t")) return text;
+    }
+    return "";
+  }
+
+  return buffer.toString("utf8");
+}
 
 export const REPORTER_SALES_ENDPOINT =
   "https://reportingitc-reporter.apple.com/reportservice/sales/v1";
@@ -27,6 +59,16 @@ function isNoReport(code: string | undefined, message: string): boolean {
     (code !== undefined && NO_REPORT_CODES.has(code)) ||
     /not available|no report|no sales|there were no/i.test(message)
   );
+}
+
+/** Raises for Apple's XML error payloads; archives pass through untouched. */
+function assertNoReporterError(buffer: Buffer): void {
+  if (isGzipBuffer(buffer) || isZipBuffer(buffer)) return;
+  const text = buffer.toString("utf8");
+  const code = text.match(/<Code>(\d+)<\/Code>/)?.[1];
+  const message = text.match(/<Message>([^<]*)<\/Message>/)?.[1] ?? text.slice(0, 300);
+  if (isNoReport(code, message)) throw new ReportNotReadyError(message);
+  throw new Error(`Apple Reporter error${code ? ` (${code})` : ""}: ${message}`);
 }
 
 /**
@@ -79,18 +121,8 @@ export async function fetchDailyReport(dateYYYYMMDD: string): Promise<string> {
   };
 
   const buffer = await postReporter(jsonRequest);
-  const isGzip = buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
-
-  if (!isGzip) {
-    const text = buffer.toString("utf8");
-    const code = text.match(/<Code>(\d+)<\/Code>/)?.[1];
-    const message = text.match(/<Message>([^<]*)<\/Message>/)?.[1] ?? text.slice(0, 300);
-    if (isNoReport(code, message)) throw new ReportNotReadyError(message);
-    throw new Error(`Apple Reporter error${code ? ` (${code})` : ""}: ${message}`);
-  }
-
-  return gunzipSync(buffer).toString("utf8");
-
+  assertNoReporterError(buffer);
+  return extractReportText(buffer);
 }
 
 function num(value: string | undefined): number {
@@ -190,24 +222,14 @@ export async function fetchStreamsReport(dateYYYYMMDD: string): Promise<string> 
   };
 
   const buffer = await postReporter(jsonRequest);
-  const isGzip = buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
-  if (!isGzip) {
-    const text = buffer.toString("utf8");
-    const code = text.match(/<Code>(\d+)<\/Code>/)?.[1];
-    const message = text.match(/<Message>([^<]*)<\/Message>/)?.[1] ?? text.slice(0, 300);
-    if (isNoReport(code, message)) throw new ReportNotReadyError(message);
-    throw new Error(`Apple Reporter error${code ? ` (${code})` : ""}: ${message}`);
+  assertNoReporterError(buffer);
+  // The outer archive holds a *.txt entry that is itself an archive, so the
+  // recursive extractor unwraps every layer until the tab-separated text.
+  const text = extractReportText(buffer);
+  if (!text.includes("\t")) {
+    throw new ReportNotReadyError("No streams report content for this date.");
   }
-
-  // Streams reports are double-compressed: the outer gzip contains another
-  // gzip archive, so keep decompressing while the payload still looks gzipped.
-  let payload = gunzipSync(buffer);
-  let guard = 0;
-  while (payload.length > 2 && payload[0] === 0x1f && payload[1] === 0x8b && guard < 5) {
-    payload = gunzipSync(payload);
-    guard += 1;
-  }
-  return payload.toString("utf8");
+  return text;
 }
 
 /** Parses the tab-separated Apple Music streaming report. */
