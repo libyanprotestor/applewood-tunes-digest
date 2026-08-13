@@ -9,7 +9,7 @@ const isZipBuffer = (b: Buffer) => b.length > 4 && b[0] === 0x50 && b[1] === 0x4
  * entries are themselves compressed (streams reports nest a second archive
  * inside a file named *.txt). Keep unwrapping layers until plain text remains.
  */
-function extractReportText(buffer: Buffer, depth = 0): string {
+export function extractReportText(buffer: Buffer, depth = 0): string {
   if (depth > 6) return buffer.toString("utf8");
 
   if (isGzipBuffer(buffer)) {
