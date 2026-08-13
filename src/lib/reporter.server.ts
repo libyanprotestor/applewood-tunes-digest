@@ -212,24 +212,14 @@ export async function fetchStreamsReport(dateYYYYMMDD: string): Promise<string> 
   };
 
   const buffer = await postReporter(jsonRequest);
-  const isGzip = buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
-  if (!isGzip) {
-    const text = buffer.toString("utf8");
-    const code = text.match(/<Code>(\d+)<\/Code>/)?.[1];
-    const message = text.match(/<Message>([^<]*)<\/Message>/)?.[1] ?? text.slice(0, 300);
-    if (isNoReport(code, message)) throw new ReportNotReadyError(message);
-    throw new Error(`Apple Reporter error${code ? ` (${code})` : ""}: ${message}`);
+  assertNoReporterError(buffer);
+  // The outer archive holds a *.txt entry that is itself an archive, so the
+  // recursive extractor unwraps every layer until the tab-separated text.
+  const text = extractReportText(buffer);
+  if (!text.includes("\t")) {
+    throw new ReportNotReadyError("No streams report content for this date.");
   }
-
-  // Streams reports are double-compressed: the outer gzip contains another
-  // gzip archive, so keep decompressing while the payload still looks gzipped.
-  let payload = gunzipSync(buffer);
-  let guard = 0;
-  while (payload.length > 2 && payload[0] === 0x1f && payload[1] === 0x8b && guard < 5) {
-    payload = gunzipSync(payload);
-    guard += 1;
-  }
-  return payload.toString("utf8");
+  return text;
 }
 
 /** Parses the tab-separated Apple Music streaming report. */
