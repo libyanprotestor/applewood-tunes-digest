@@ -78,32 +78,19 @@ export async function fetchDailyReport(dateYYYYMMDD: string): Promise<string> {
     queryInput: `[p=Reporter.properties, Sales.getReport, ${vendorId},Sales,Detailed,Daily,${dateYYYYMMDD},1_3]`,
   };
 
-  const res = await fetch(REPORTER_SALES_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "*/*",
-    },
-    body: `jsonRequest=${encodeURIComponent(JSON.stringify(jsonRequest))}`,
-  });
-
-  const buffer = Buffer.from(await res.arrayBuffer());
+  const buffer = await postReporter(jsonRequest);
   const isGzip = buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
 
   if (!isGzip) {
     const text = buffer.toString("utf8");
-    const codeMatch = text.match(/<Code>(\d+)<\/Code>/);
-    const msgMatch = text.match(/<Message>([^<]*)<\/Message>/);
-    const code = codeMatch?.[1];
-    const message = msgMatch?.[1] ?? text.slice(0, 300);
-    // 213 = no reports available for that date yet.
-    if (code === "213" || /not available|no reports/i.test(message)) {
-      throw new ReportNotReadyError(message);
-    }
-    throw new Error(`Apple Reporter error (${res.status}${code ? `/${code}` : ""}): ${message}`);
+    const code = text.match(/<Code>(\d+)<\/Code>/)?.[1];
+    const message = text.match(/<Message>([^<]*)<\/Message>/)?.[1] ?? text.slice(0, 300);
+    if (isNoReport(code, message)) throw new ReportNotReadyError(message);
+    throw new Error(`Apple Reporter error${code ? ` (${code})` : ""}: ${message}`);
   }
 
   return gunzipSync(buffer).toString("utf8");
+
 }
 
 function num(value: string | undefined): number {
