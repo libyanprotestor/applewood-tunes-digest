@@ -433,7 +433,11 @@ export const getStreamRate = createServerFn({ method: "GET" })
       .select("stream_rate_per_1000")
       .limit(1)
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) {
+      // Transient auth/clock-skew errors must not blank the page; fall back to the default rate.
+      console.error("[getStreamRate]", error.message);
+      return { ratePer1000: 1 };
+    }
     return { ratePer1000: Number(data?.stream_rate_per_1000 ?? 1) };
   });
 
