@@ -102,11 +102,15 @@ export async function ingestStreams(reportDate: string, db?: SupabaseClient): Pr
       });
     }
 
-    const { data: items } = await supabaseAdmin.from("items").select("id, sublabel_id, isrc, upc");
+    const { data: items } = await supabaseAdmin
+      .from("items")
+      .select("id, sublabel_id, isrc, upc, apple_id");
     const byCode = new Map<string, { id: string; sublabel_id: string }>();
     for (const item of items ?? []) {
       if (item.isrc) byCode.set(compact(item.isrc), { id: item.id, sublabel_id: item.sublabel_id });
       if (item.upc) byCode.set(compact(item.upc), { id: item.id, sublabel_id: item.sublabel_id });
+      if (item.apple_id)
+        byCode.set(compact(item.apple_id), { id: item.id, sublabel_id: item.sublabel_id });
     }
 
     const matched: Record<string, unknown>[] = [];
