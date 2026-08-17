@@ -51,10 +51,22 @@ export const deleteSublabel = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+
+    const { count, error: countError } = await context.supabase
+      .from("items")
+      .select("id", { count: "exact", head: true })
+      .eq("sublabel_id", data.id);
+    if (countError) throw new Error(countError.message);
+    if ((count ?? 0) > 0)
+      throw new Error(
+        `This sublabel still has ${count} catalog item${count === 1 ? "" : "s"}. Delete or reassign them first.`,
+      );
+
     const { error } = await context.supabase.from("sublabels").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
 
 /** Creates the login a sublabel uses to sign in and see their own numbers. */
 export const createSublabelUser = createServerFn({ method: "POST" })
