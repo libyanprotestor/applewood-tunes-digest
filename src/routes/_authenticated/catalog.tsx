@@ -105,7 +105,8 @@ function CatalogPage() {
     <main className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="text-3xl font-semibold tracking-tight">Catalog</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Upload a CSV with columns: title, artist, isrc, upc, type (ringtone / single / album).
+        Upload a CSV with columns: title, artist, isrc, upc, apple_id, type (ringtone / single / album).
+        Apple ID is Apple&apos;s numeric identifier used in streaming reports.
       </p>
 
       <div className="mt-8 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-6">
