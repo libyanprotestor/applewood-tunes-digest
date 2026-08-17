@@ -65,7 +65,7 @@ export const deleteSublabel = createServerFn({ method: "POST" })
 
     const { error } = await context.supabase.from("sublabels").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true as const, message: "" };
   });
 
 
@@ -236,7 +236,7 @@ export const deleteItem = createServerFn({ method: "POST" })
 
     const { error } = await context.supabase.from("items").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true as const, message: "" };
   });
 
 
