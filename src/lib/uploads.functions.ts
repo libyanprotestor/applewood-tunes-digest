@@ -214,8 +214,9 @@ export const listUploads = createServerFn({ method: "POST" })
       )
       .order("created_at", { ascending: false })
       .limit(300);
-    if (data.status && data.status !== "all") query = query.eq("status", data.status);
-    if (data.kind && data.kind !== "all") query = query.eq("kind", data.kind);
+    if (data.status && data.status !== "all")
+      query = query.eq("status", data.status as "draft");
+    if (data.kind && data.kind !== "all") query = query.eq("kind", data.kind as "album");
     if (data.sublabelId) query = query.eq("sublabel_id", data.sublabelId);
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
