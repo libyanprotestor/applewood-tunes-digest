@@ -35,6 +35,123 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_jobs: {
+        Row: {
+          apple_ticket: string | null
+          attempts: number
+          claimed_at: string | null
+          created_at: string
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          lease_until: string | null
+          state: Database["public"]["Enums"]["delivery_state"]
+          updated_at: string
+          upload_id: string
+          worker_id: string | null
+        }
+        Insert: {
+          apple_ticket?: string | null
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          lease_until?: string | null
+          state?: Database["public"]["Enums"]["delivery_state"]
+          updated_at?: string
+          upload_id: string
+          worker_id?: string | null
+        }
+        Update: {
+          apple_ticket?: string | null
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          lease_until?: string | null
+          state?: Database["public"]["Enums"]["delivery_state"]
+          updated_at?: string
+          upload_id?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_jobs_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_logs: {
+        Row: {
+          created_at: string
+          id: number
+          job_id: string
+          level: string
+          line: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          job_id: string
+          level?: string
+          line: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          job_id?: string
+          level?: string
+          line?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      isrc_pool: {
+        Row: {
+          assigned_at: string | null
+          code: string
+          created_at: string
+          id: string
+          used_by_track_id: string | null
+        }
+        Insert: {
+          assigned_at?: string | null
+          code: string
+          created_at?: string
+          id?: string
+          used_by_track_id?: string | null
+        }
+        Update: {
+          assigned_at?: string | null
+          code?: string
+          created_at?: string
+          id?: string
+          used_by_track_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "isrc_pool_track_fk"
+            columns: ["used_by_track_id"]
+            isOneToOne: false
+            referencedRelation: "upload_tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       items: {
         Row: {
           apple_id: string | null
@@ -491,6 +608,175 @@ export type Database = {
           },
         ]
       }
+      upload_files: {
+        Row: {
+          bytes: number
+          checksum: string | null
+          content_type: string | null
+          created_at: string
+          duration_seconds: number | null
+          filename: string
+          id: string
+          role: Database["public"]["Enums"]["upload_file_role"]
+          storage_key: string
+          upload_id: string
+        }
+        Insert: {
+          bytes?: number
+          checksum?: string | null
+          content_type?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          filename: string
+          id?: string
+          role?: Database["public"]["Enums"]["upload_file_role"]
+          storage_key: string
+          upload_id: string
+        }
+        Update: {
+          bytes?: number
+          checksum?: string | null
+          content_type?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          filename?: string
+          id?: string
+          role?: Database["public"]["Enums"]["upload_file_role"]
+          storage_key?: string
+          upload_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upload_files_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upload_tracks: {
+        Row: {
+          artist_name: string | null
+          created_at: string
+          explicit: boolean
+          file_id: string | null
+          id: string
+          isrc: string | null
+          title: string
+          track_number: number
+          updated_at: string
+          upload_id: string
+          version: string | null
+        }
+        Insert: {
+          artist_name?: string | null
+          created_at?: string
+          explicit?: boolean
+          file_id?: string | null
+          id?: string
+          isrc?: string | null
+          title: string
+          track_number?: number
+          updated_at?: string
+          upload_id: string
+          version?: string | null
+        }
+        Update: {
+          artist_name?: string | null
+          created_at?: string
+          explicit?: boolean
+          file_id?: string | null
+          id?: string
+          isrc?: string | null
+          title?: string
+          track_number?: number
+          updated_at?: string
+          upload_id?: string
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upload_tracks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "upload_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upload_tracks_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uploads: {
+        Row: {
+          admin_notes: string | null
+          artist_name: string | null
+          created_at: string
+          created_by: string | null
+          file_count: number
+          id: string
+          kind: Database["public"]["Enums"]["upload_kind"]
+          rejection_reason: string | null
+          release_date: string | null
+          status: Database["public"]["Enums"]["upload_status"]
+          storage_prefix: string
+          sublabel_id: string
+          title: string
+          total_bytes: number
+          upc: string | null
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          artist_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          file_count?: number
+          id?: string
+          kind: Database["public"]["Enums"]["upload_kind"]
+          rejection_reason?: string | null
+          release_date?: string | null
+          status?: Database["public"]["Enums"]["upload_status"]
+          storage_prefix: string
+          sublabel_id: string
+          title: string
+          total_bytes?: number
+          upc?: string | null
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          artist_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          file_count?: number
+          id?: string
+          kind?: Database["public"]["Enums"]["upload_kind"]
+          rejection_reason?: string | null
+          release_date?: string | null
+          status?: Database["public"]["Enums"]["upload_status"]
+          storage_prefix?: string
+          sublabel_id?: string
+          title?: string
+          total_bytes?: number
+          upc?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uploads_sublabel_id_fkey"
+            columns: ["sublabel_id"]
+            isOneToOne: false
+            referencedRelation: "sublabels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -517,6 +803,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_delivery_job: {
+        Args: { _lease_seconds?: number; _worker_id: string }
+        Returns: {
+          job_id: string
+          upload_id: string
+        }[]
+      }
       current_sublabel_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -554,8 +847,27 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "sublabel"
+      delivery_state:
+        | "queued"
+        | "claimed"
+        | "packaging"
+        | "uploading"
+        | "succeeded"
+        | "failed"
       item_type: "ringtone" | "single" | "album" | "other"
       run_status: "pending" | "success" | "not_ready" | "failed"
+      upload_file_role: "audio" | "artwork" | "document" | "other"
+      upload_kind: "album" | "singles" | "ringtones"
+      upload_status:
+        | "draft"
+        | "uploaded"
+        | "in_review"
+        | "ready"
+        | "packaging"
+        | "delivering"
+        | "delivered"
+        | "rejected"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -684,8 +996,29 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "sublabel"],
+      delivery_state: [
+        "queued",
+        "claimed",
+        "packaging",
+        "uploading",
+        "succeeded",
+        "failed",
+      ],
       item_type: ["ringtone", "single", "album", "other"],
       run_status: ["pending", "success", "not_ready", "failed"],
+      upload_file_role: ["audio", "artwork", "document", "other"],
+      upload_kind: ["album", "singles", "ringtones"],
+      upload_status: [
+        "draft",
+        "uploaded",
+        "in_review",
+        "ready",
+        "packaging",
+        "delivering",
+        "delivered",
+        "rejected",
+        "cancelled",
+      ],
     },
   },
 } as const
