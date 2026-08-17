@@ -29,7 +29,14 @@ export const Route = createFileRoute("/_authenticated/catalog")({
   component: CatalogPage,
 });
 
-type Row = { title: string; artistName?: string; isrc?: string; upc?: string; itemType: "ringtone" | "single" | "album" | "other" };
+type Row = {
+  title: string;
+  artistName?: string;
+  isrc?: string;
+  upc?: string;
+  appleId?: string;
+  itemType: "ringtone" | "single" | "album" | "other";
+};
 
 function parseCsv(text: string): Row[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
@@ -40,6 +47,7 @@ function parseCsv(text: string): Row[] {
   const iArtist = idx(["artist", "artist_name", "artistname"]);
   const iIsrc = idx(["isrc"]);
   const iUpc = idx(["upc", "ean", "barcode"]);
+  const iApple = idx(["apple_id", "appleid", "apple identifier", "apple_identifier", "adam id", "adam_id"]);
   const iType = idx(["type", "item_type", "itemtype"]);
 
   const rows: Row[] = [];
@@ -55,6 +63,7 @@ function parseCsv(text: string): Row[] {
       ...(iArtist >= 0 && cells[iArtist] ? { artistName: cells[iArtist] } : {}),
       ...(iIsrc >= 0 && cells[iIsrc] ? { isrc: cells[iIsrc] } : {}),
       ...(iUpc >= 0 && cells[iUpc] ? { upc: cells[iUpc] } : {}),
+      ...(iApple >= 0 && cells[iApple] ? { appleId: cells[iApple] } : {}),
       itemType,
     });
   }
