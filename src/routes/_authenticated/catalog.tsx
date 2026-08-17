@@ -155,7 +155,9 @@ function CatalogPage() {
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{item.title}</p>
               <p className="truncate text-xs text-muted-foreground">
-                {item.artist_name ?? "—"} · {item.item_type} · {item.isrc ?? item.upc ?? "no code"}
+                {item.artist_name ?? "—"} · {item.item_type} ·{" "}
+                {item.isrc ?? item.upc ?? "no code"}
+                {item.apple_id ? ` · Apple ID ${item.apple_id}` : ""}
               </p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => remove.mutate(item.id)}>
