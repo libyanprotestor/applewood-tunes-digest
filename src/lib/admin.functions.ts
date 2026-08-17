@@ -411,17 +411,23 @@ export const listUnmatchedStreams = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-/** Assigns an unmatched streaming line to a catalog item. */
+/** Assigns unmatched streaming lines to a catalog item (all lines sharing the Apple Identifier by default). */
 export const assignUnmatchedStream = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ unmatchedId: z.string().uuid(), itemId: z.string().uuid() }).parse(input),
+    z
+      .object({
+        unmatchedId: z.string().uuid(),
+        itemId: z.string().uuid(),
+        applyToAll: z.boolean().default(true),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
 
-    const { data: row, error: rowError } = await context.supabase
+    const { data: seed, error: rowError } = await context.supabase
       .from("unmatched_streams")
       .select("*")
       .eq("id", data.unmatchedId)
@@ -436,23 +442,81 @@ export const assignUnmatchedStream = createServerFn({ method: "POST" })
     if (itemError) throw new Error(itemError.message);
 
     // Remember Apple's numeric identifier so future report lines match automatically.
-    if (!item.apple_id && row.apple_identifier) {
+    if (!item.apple_id && seed.apple_identifier) {
       await context.supabase
         .from("items")
-        .update({ apple_id: row.apple_identifier })
+        .update({ apple_id: seed.apple_identifier })
         .eq("id", item.id);
     }
 
-    const { id: _id, resolved: _resolved, created_at: _createdAt, ...rest } = row;
-    const { error: insertError } = await context.supabase
-      .from("streams")
-      .insert({ ...rest, item_id: item.id, sublabel_id: item.sublabel_id });
+    let rows = [seed];
+    if (data.applyToAll && seed.apple_identifier) {
+      const { data: siblings, error } = await context.supabase
+        .from("unmatched_streams")
+        .select("*")
+        .eq("resolved", false)
+        .eq("apple_identifier", seed.apple_identifier);
+      if (error) throw new Error(error.message);
+      if (siblings?.length) rows = siblings;
+    }
+
+    const { error: insertError } = await context.supabase.from("streams").insert(
+      rows.map(({ id: _id, resolved: _resolved, created_at: _createdAt, ...rest }) => ({
+        ...rest,
+        item_id: item.id,
+        sublabel_id: item.sublabel_id,
+      })),
+    );
     if (insertError) throw new Error(insertError.message);
 
     const { error: updateError } = await context.supabase
       .from("unmatched_streams")
       .update({ resolved: true })
-      .eq("id", data.unmatchedId);
+      .in(
+        "id",
+        rows.map((r) => r.id),
+      );
     if (updateError) throw new Error(updateError.message);
-    return { ok: true };
+    return { ok: true, count: rows.length };
   });
+
+/** Creates a catalog item from an unmatched sale or stream line, then assigns every
+ *  unresolved line sharing the same identifier to it. */
+export const createItemFromUnmatched = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        kind: z.enum(["sale", "stream"]),
+        unmatchedId: z.string().uuid(),
+        sublabelId: z.string().uuid(),
+        title: z.string().trim().min(1).max(300),
+        artistName: z.string().trim().max(300).optional(),
+        itemType: z.enum(["ringtone", "single", "album", "other"]).default("single"),
+        isrc: z.string().trim().max(40).optional(),
+        upc: z.string().trim().max(40).optional(),
+        appleId: z.string().trim().max(40).optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: item, error } = await context.supabase
+      .from("items")
+      .insert({
+        sublabel_id: data.sublabelId,
+        title: data.title,
+        artist_name: data.artistName || null,
+        item_type: data.itemType,
+        isrc: data.isrc ? data.isrc.toUpperCase() : null,
+        upc: data.upc ? data.upc.toUpperCase() : null,
+        apple_id: data.appleId || null,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    return { ok: true as const, itemId: item.id };
+  });
+
