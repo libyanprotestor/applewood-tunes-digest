@@ -29,7 +29,14 @@ export const Route = createFileRoute("/_authenticated/catalog")({
   component: CatalogPage,
 });
 
-type Row = { title: string; artistName?: string; isrc?: string; upc?: string; itemType: "ringtone" | "single" | "album" | "other" };
+type Row = {
+  title: string;
+  artistName?: string;
+  isrc?: string;
+  upc?: string;
+  appleId?: string;
+  itemType: "ringtone" | "single" | "album" | "other";
+};
 
 function parseCsv(text: string): Row[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
@@ -40,6 +47,7 @@ function parseCsv(text: string): Row[] {
   const iArtist = idx(["artist", "artist_name", "artistname"]);
   const iIsrc = idx(["isrc"]);
   const iUpc = idx(["upc", "ean", "barcode"]);
+  const iApple = idx(["apple_id", "appleid", "apple identifier", "apple_identifier", "adam id", "adam_id"]);
   const iType = idx(["type", "item_type", "itemtype"]);
 
   const rows: Row[] = [];
@@ -55,6 +63,7 @@ function parseCsv(text: string): Row[] {
       ...(iArtist >= 0 && cells[iArtist] ? { artistName: cells[iArtist] } : {}),
       ...(iIsrc >= 0 && cells[iIsrc] ? { isrc: cells[iIsrc] } : {}),
       ...(iUpc >= 0 && cells[iUpc] ? { upc: cells[iUpc] } : {}),
+      ...(iApple >= 0 && cells[iApple] ? { appleId: cells[iApple] } : {}),
       itemType,
     });
   }
@@ -96,7 +105,8 @@ function CatalogPage() {
     <main className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="text-3xl font-semibold tracking-tight">Catalog</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Upload a CSV with columns: title, artist, isrc, upc, type (ringtone / single / album).
+        Upload a CSV with columns: title, artist, isrc, upc, apple_id, type (ringtone / single / album).
+        Apple ID is Apple&apos;s numeric identifier used in streaming reports.
       </p>
 
       <div className="mt-8 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-6">
@@ -145,7 +155,9 @@ function CatalogPage() {
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{item.title}</p>
               <p className="truncate text-xs text-muted-foreground">
-                {item.artist_name ?? "—"} · {item.item_type} · {item.isrc ?? item.upc ?? "no code"}
+                {item.artist_name ?? "—"} · {item.item_type} ·{" "}
+                {item.isrc ?? item.upc ?? "no code"}
+                {item.apple_id ? ` · Apple ID ${item.apple_id}` : ""}
               </p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => remove.mutate(item.id)}>

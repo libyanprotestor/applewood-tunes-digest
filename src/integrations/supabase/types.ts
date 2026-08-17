@@ -37,6 +37,7 @@ export type Database = {
       }
       items: {
         Row: {
+          apple_id: string | null
           artist_name: string | null
           created_at: string
           id: string
@@ -48,6 +49,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          apple_id?: string | null
           artist_name?: string | null
           created_at?: string
           id?: string
@@ -59,6 +61,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          apple_id?: string | null
           artist_name?: string | null
           created_at?: string
           id?: string

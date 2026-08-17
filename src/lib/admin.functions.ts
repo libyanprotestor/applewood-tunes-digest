@@ -138,11 +138,14 @@ export const listItems = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     let query = context.supabase
       .from("items")
-      .select("id, title, artist_name, isrc, upc, item_type, sublabel_id, sublabels(name)")
+      .select("id, title, artist_name, isrc, upc, apple_id, item_type, sublabel_id, sublabels(name)")
       .order("title")
       .limit(500);
     if (data.sublabelId) query = query.eq("sublabel_id", data.sublabelId);
-    if (data.search) query = query.or(`title.ilike.%${data.search}%,isrc.ilike.%${data.search}%,upc.ilike.%${data.search}%`);
+    if (data.search)
+      query = query.or(
+        `title.ilike.%${data.search}%,isrc.ilike.%${data.search}%,upc.ilike.%${data.search}%,apple_id.ilike.%${data.search}%`,
+      );
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
     return rows ?? [];
@@ -153,6 +156,7 @@ const csvItem = z.object({
   artistName: z.string().trim().max(300).optional(),
   isrc: z.string().trim().max(40).optional(),
   upc: z.string().trim().max(40).optional(),
+  appleId: z.string().trim().max(40).optional(),
   itemType: z.enum(["ringtone", "single", "album", "other"]).default("single"),
 });
 
@@ -175,6 +179,7 @@ export const importItems = createServerFn({ method: "POST" })
         artist_name: row.artistName || null,
         isrc: row.isrc ? row.isrc.toUpperCase() : null,
         upc: row.upc ? row.upc.toUpperCase() : null,
+        apple_id: row.appleId || null,
         item_type: row.itemType,
       });
       if (error) errors.push(`${row.title}: ${error.message}`);
@@ -362,10 +367,18 @@ export const assignUnmatchedStream = createServerFn({ method: "POST" })
 
     const { data: item, error: itemError } = await context.supabase
       .from("items")
-      .select("id, sublabel_id")
+      .select("id, sublabel_id, apple_id")
       .eq("id", data.itemId)
       .single();
     if (itemError) throw new Error(itemError.message);
+
+    // Remember Apple's numeric identifier so future report lines match automatically.
+    if (!item.apple_id && row.apple_identifier) {
+      await context.supabase
+        .from("items")
+        .update({ apple_id: row.apple_identifier })
+        .eq("id", item.id);
+    }
 
     const { id: _id, resolved: _resolved, created_at: _createdAt, ...rest } = row;
     const { error: insertError } = await context.supabase
