@@ -19,8 +19,15 @@ const adminLinks = [
   { to: "/dashboard", label: "Overview" },
   { to: "/sublabels", label: "Sublabels" },
   { to: "/catalog", label: "Catalog" },
+  { to: "/uploads", label: "Uploads" },
+  { to: "/deliveries", label: "Deliveries" },
   { to: "/unmatched", label: "Unmatched" },
   { to: "/reports", label: "Report runs" },
+] as const;
+
+const sublabelLinks = [
+  { to: "/dashboard", label: "Overview" },
+  { to: "/uploads", label: "Uploads" },
 ] as const;
 
 function AuthenticatedLayout() {
@@ -28,7 +35,7 @@ function AuthenticatedLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const viewer = useQuery({ queryKey: ["viewer"], queryFn: useServerFn(getViewer) });
 
-  const links = viewer.data?.isAdmin ? adminLinks : adminLinks.slice(0, 1);
+  const links = viewer.data?.isAdmin ? adminLinks : sublabelLinks;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
