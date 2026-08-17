@@ -74,10 +74,13 @@ function parseCsv(text: string): Row[] {
   return rows;
 }
 
+type ImportReport = Awaited<ReturnType<typeof importItems>>;
+
 function CatalogPage() {
   const qc = useQueryClient();
   const [sublabelId, setSublabelId] = useState<string>("");
   const [rows, setRows] = useState<Row[]>([]);
+  const [report, setReport] = useState<ImportReport | null>(null);
 
   const sublabels = useQuery({ queryKey: ["sublabels"], queryFn: useServerFn(listSublabels) });
   const listFn = useServerFn(listItems);
@@ -93,12 +96,12 @@ function CatalogPage() {
     mutationFn: () => importFn({ data: { rows } }),
     onSuccess: (res) => {
       setRows([]);
+      setReport(res);
       void qc.invalidateQueries({ queryKey: ["items"] });
-      toast.success(`Imported ${res.inserted} items${res.skipped ? `, ${res.skipped} skipped` : ""}`);
-      if (res.errors.length) toast.error(res.errors[0]!);
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteFn({ data: { id } }),
