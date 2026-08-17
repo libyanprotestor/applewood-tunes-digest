@@ -18,6 +18,7 @@ import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedSublabelsRouteImport } from './routes/_authenticated/sublabels'
 import { Route as AuthenticatedUnmatchedRouteImport } from './routes/_authenticated/unmatched'
 import { Route as AuthenticatedUploadsRouteImport } from './routes/_authenticated/uploads'
+import { Route as AuthenticatedUploadsIdRouteImport } from './routes/_authenticated/uploads.$id'
 import { Route as ApiPublicHooksAppleReportsRouteImport } from './routes/api/public/hooks/apple-reports'
 
 const IndexRoute = IndexRouteImport.update({
@@ -64,6 +65,11 @@ const AuthenticatedUploadsRoute = AuthenticatedUploadsRouteImport.update({
   path: '/uploads',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedUploadsIdRoute = AuthenticatedUploadsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AuthenticatedUploadsRoute,
+} as any)
 const ApiPublicHooksAppleReportsRoute =
   ApiPublicHooksAppleReportsRouteImport.update({
     id: '/api/public/hooks/apple-reports',
@@ -79,7 +85,8 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/sublabels': typeof AuthenticatedSublabelsRoute
   '/unmatched': typeof AuthenticatedUnmatchedRoute
-  '/uploads': typeof AuthenticatedUploadsRoute
+  '/uploads': typeof AuthenticatedUploadsRouteWithChildren
+  '/uploads/$id': typeof AuthenticatedUploadsIdRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRoutesByTo {
@@ -90,7 +97,8 @@ export interface FileRoutesByTo {
   '/reports': typeof AuthenticatedReportsRoute
   '/sublabels': typeof AuthenticatedSublabelsRoute
   '/unmatched': typeof AuthenticatedUnmatchedRoute
-  '/uploads': typeof AuthenticatedUploadsRoute
+  '/uploads': typeof AuthenticatedUploadsRouteWithChildren
+  '/uploads/$id': typeof AuthenticatedUploadsIdRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRoutesById {
@@ -103,7 +111,8 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/sublabels': typeof AuthenticatedSublabelsRoute
   '/_authenticated/unmatched': typeof AuthenticatedUnmatchedRoute
-  '/_authenticated/uploads': typeof AuthenticatedUploadsRoute
+  '/_authenticated/uploads': typeof AuthenticatedUploadsRouteWithChildren
+  '/_authenticated/uploads/$id': typeof AuthenticatedUploadsIdRoute
   '/api/public/hooks/apple-reports': typeof ApiPublicHooksAppleReportsRoute
 }
 export interface FileRouteTypes {
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/sublabels'
     | '/unmatched'
     | '/uploads'
+    | '/uploads/$id'
     | '/api/public/hooks/apple-reports'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/sublabels'
     | '/unmatched'
     | '/uploads'
+    | '/uploads/$id'
     | '/api/public/hooks/apple-reports'
   id:
     | '__root__'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sublabels'
     | '/_authenticated/unmatched'
     | '/_authenticated/uploads'
+    | '/_authenticated/uploads/$id'
     | '/api/public/hooks/apple-reports'
   fileRoutesById: FileRoutesById
 }
@@ -215,6 +227,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUploadsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/uploads/$id': {
+      id: '/_authenticated/uploads/$id'
+      path: '/$id'
+      fullPath: '/uploads/$id'
+      preLoaderRoute: typeof AuthenticatedUploadsIdRouteImport
+      parentRoute: typeof AuthenticatedUploadsRoute
+    }
     '/api/public/hooks/apple-reports': {
       id: '/api/public/hooks/apple-reports'
       path: '/api/public/hooks/apple-reports'
@@ -225,13 +244,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedUploadsRouteChildren {
+  AuthenticatedUploadsIdRoute: typeof AuthenticatedUploadsIdRoute
+}
+
+const AuthenticatedUploadsRouteChildren: AuthenticatedUploadsRouteChildren = {
+  AuthenticatedUploadsIdRoute: AuthenticatedUploadsIdRoute,
+}
+
+const AuthenticatedUploadsRouteWithChildren =
+  AuthenticatedUploadsRoute._addFileChildren(AuthenticatedUploadsRouteChildren)
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCatalogRoute: typeof AuthenticatedCatalogRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSublabelsRoute: typeof AuthenticatedSublabelsRoute
   AuthenticatedUnmatchedRoute: typeof AuthenticatedUnmatchedRoute
-  AuthenticatedUploadsRoute: typeof AuthenticatedUploadsRoute
+  AuthenticatedUploadsRoute: typeof AuthenticatedUploadsRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -240,7 +270,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSublabelsRoute: AuthenticatedSublabelsRoute,
   AuthenticatedUnmatchedRoute: AuthenticatedUnmatchedRoute,
-  AuthenticatedUploadsRoute: AuthenticatedUploadsRoute,
+  AuthenticatedUploadsRoute: AuthenticatedUploadsRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =
