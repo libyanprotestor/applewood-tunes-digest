@@ -92,7 +92,12 @@ export const createSublabelUser = createServerFn({ method: "POST" })
       email_confirm: true,
       user_metadata: { sublabel_id: data.sublabelId },
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      const msg = /already been registered|already registered|already exists/i.test(error.message)
+        ? "That email already has an account. Use a different email, or reset the password of the existing login."
+        : error.message;
+      return { ok: false as const, message: msg };
+    }
 
     const userId = created.user?.id;
     if (userId) {
@@ -103,7 +108,8 @@ export const createSublabelUser = createServerFn({ method: "POST" })
         .from("user_roles")
         .upsert({ user_id: userId, role: "sublabel" }, { onConflict: "user_id,role" });
     }
-    return { ok: true };
+    return { ok: true as const, message: "" };
+
   });
 
 /** Sets a new password for an existing sublabel login. */

@@ -116,13 +116,18 @@ function SublabelsPage() {
   const issue = useMutation({
     mutationFn: () =>
       userFn({ data: { sublabelId: loginFor!, email: loginEmail, password: loginPassword } }),
-    onSuccess: () => {
+    onSuccess: (res: { ok: boolean; message: string }) => {
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
       setLoginFor(null);
       setLoginEmail("");
       setLoginPassword("");
       invalidate();
       toast.success("Login created");
     },
+
     onError: (e: Error) => toast.error(e.message),
   });
 
