@@ -110,9 +110,19 @@ function UploadsPage() {
   const totalBytes = files.reduce((a, f) => a + f.size, 0);
 
   async function handleUpload() {
-    if (!title.trim()) return toast.error("Give the release a title.");
-    if (files.length === 0) return toast.error("Pick the audio files and the cover artwork.");
-    if (isAdmin && !sublabelId) return toast.error("Choose which sublabel this release belongs to.");
+    if (!title.trim()) {
+      toast.error("Give the release a title.");
+      return;
+    }
+    if (files.length === 0) {
+      toast.error("Pick the audio files and the cover artwork.");
+      return;
+    }
+    if (isAdmin && !sublabelId) {
+      toast.error("Choose which sublabel this release belongs to.");
+      return;
+    }
+
 
     setBusy(true);
     setProgress({});
