@@ -257,17 +257,24 @@ export const listUnmatched = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-/** Assigns an unmatched report line to a catalog item, moving the revenue over. */
+/** Assigns unmatched report lines to a catalog item, moving the revenue over.
+ *  By default every unresolved line sharing the same ISRC/UPC is assigned at once. */
 export const assignUnmatched = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ unmatchedId: z.string().uuid(), itemId: z.string().uuid() }).parse(input),
+    z
+      .object({
+        unmatchedId: z.string().uuid(),
+        itemId: z.string().uuid(),
+        applyToAll: z.boolean().default(true),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
 
-    const { data: row, error: rowError } = await context.supabase
+    const { data: seed, error: rowError } = await context.supabase
       .from("unmatched_sales")
       .select("*")
       .eq("id", data.unmatchedId)
@@ -281,26 +288,41 @@ export const assignUnmatched = createServerFn({ method: "POST" })
       .single();
     if (itemError) throw new Error(itemError.message);
 
-    const { error: insertError } = await context.supabase.from("sales").insert({
-      item_id: item.id,
-      sublabel_id: item.sublabel_id,
-      sale_date: row.sale_date,
-      country_code: row.country_code,
-      units: row.units,
-      original_currency: row.original_currency,
-      revenue_usd: row.revenue_usd,
-      product_type_id: row.product_type_id,
-      report_run_id: row.report_run_id,
-    });
+    let rows = [seed];
+    if (data.applyToAll && (seed.isrc || seed.upc)) {
+      let q = context.supabase.from("unmatched_sales").select("*").eq("resolved", false);
+      q = seed.isrc ? q.eq("isrc", seed.isrc) : q.eq("upc", seed.upc!);
+      const { data: siblings, error } = await q;
+      if (error) throw new Error(error.message);
+      if (siblings?.length) rows = siblings;
+    }
+
+    const { error: insertError } = await context.supabase.from("sales").insert(
+      rows.map((row) => ({
+        item_id: item.id,
+        sublabel_id: item.sublabel_id,
+        sale_date: row.sale_date,
+        country_code: row.country_code,
+        units: row.units,
+        original_currency: row.original_currency,
+        revenue_usd: row.revenue_usd,
+        product_type_id: row.product_type_id,
+        report_run_id: row.report_run_id,
+      })),
+    );
     if (insertError) throw new Error(insertError.message);
 
     const { error: updateError } = await context.supabase
       .from("unmatched_sales")
       .update({ resolved: true })
-      .eq("id", data.unmatchedId);
+      .in(
+        "id",
+        rows.map((r) => r.id),
+      );
     if (updateError) throw new Error(updateError.message);
-    return { ok: true };
+    return { ok: true, count: rows.length };
   });
+
 
 /* -------------------------------- report runs -------------------------------- */
 
