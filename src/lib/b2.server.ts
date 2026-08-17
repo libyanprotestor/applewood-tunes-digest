@@ -133,11 +133,9 @@ async function signedFetch(
   const signature = hex(await hmac(await signingKey(short), stringToSign));
   const auth = `AWS4-HMAC-SHA256 Credential=${keyId}/${short}/${region}/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-  const res = await fetch(`${origin}${path}${cq ? `?${cq}` : ""}`, {
-    method,
-    headers: { ...headers, Authorization: auth },
-    body: body || undefined,
-  });
+  const init: RequestInit = { method, headers: { ...headers, Authorization: auth } };
+  if (body) init.body = body;
+  const res = await fetch(`${origin}${path}${cq ? `?${cq}` : ""}`, init);
   const text = await res.text();
   if (!res.ok) throw new Error(`Storage ${method} failed [${res.status}]: ${text.slice(0, 500)}`);
   return text;
