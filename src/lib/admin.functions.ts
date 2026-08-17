@@ -367,10 +367,18 @@ export const assignUnmatchedStream = createServerFn({ method: "POST" })
 
     const { data: item, error: itemError } = await context.supabase
       .from("items")
-      .select("id, sublabel_id")
+      .select("id, sublabel_id, apple_id")
       .eq("id", data.itemId)
       .single();
     if (itemError) throw new Error(itemError.message);
+
+    // Remember Apple's numeric identifier so future report lines match automatically.
+    if (!item.apple_id && row.apple_identifier) {
+      await context.supabase
+        .from("items")
+        .update({ apple_id: row.apple_identifier })
+        .eq("id", item.id);
+    }
 
     const { id: _id, resolved: _resolved, created_at: _createdAt, ...rest } = row;
     const { error: insertError } = await context.supabase
