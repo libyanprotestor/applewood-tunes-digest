@@ -138,11 +138,14 @@ export const listItems = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     let query = context.supabase
       .from("items")
-      .select("id, title, artist_name, isrc, upc, item_type, sublabel_id, sublabels(name)")
+      .select("id, title, artist_name, isrc, upc, apple_id, item_type, sublabel_id, sublabels(name)")
       .order("title")
       .limit(500);
     if (data.sublabelId) query = query.eq("sublabel_id", data.sublabelId);
-    if (data.search) query = query.or(`title.ilike.%${data.search}%,isrc.ilike.%${data.search}%,upc.ilike.%${data.search}%`);
+    if (data.search)
+      query = query.or(
+        `title.ilike.%${data.search}%,isrc.ilike.%${data.search}%,upc.ilike.%${data.search}%,apple_id.ilike.%${data.search}%`,
+      );
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
     return rows ?? [];
