@@ -156,7 +156,6 @@ const csvItem = z.object({
   artistName: z.string().trim().max(300).optional(),
   isrc: z.string().trim().max(40).optional(),
   upc: z.string().trim().max(40).optional(),
-  upc: z.string().trim().max(40).optional(),
   appleId: z.string().trim().max(40).optional(),
   itemType: z.enum(["ringtone", "single", "album", "other"]).default("single"),
 });
