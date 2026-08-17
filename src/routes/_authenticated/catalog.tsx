@@ -146,6 +146,86 @@ function CatalogPage() {
         </Button>
       </div>
 
+      {report && (
+        <section className="mt-8 space-y-6 rounded-2xl border border-border bg-card p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Import report</h2>
+              <p className="text-sm text-muted-foreground">
+                {report.totalRows} rows read · {report.inserted} items added ·{" "}
+                {report.skippedUnknownSublabel} skipped (unknown sublabel) · {report.duplicateCount} duplicates
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setReport(null)}>
+              Dismiss
+            </Button>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium">Added per sublabel</h3>
+            {report.perSublabel.length === 0 ? (
+              <p className="mt-1 text-sm text-muted-foreground">No items were added.</p>
+            ) : (
+              <ul className="mt-2 space-y-1 text-sm">
+                {report.perSublabel.map((s) => (
+                  <li key={s.name} className="flex justify-between border-b border-border/60 py-1">
+                    <span>{s.name}</span>
+                    <span className="tabular-nums text-muted-foreground">{s.count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {report.unknownSublabels.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-destructive">
+                Sublabels not found in the database
+              </h3>
+              <ul className="mt-2 space-y-1 text-sm">
+                {report.unknownSublabels.map((s) => (
+                  <li key={s.name} className="flex justify-between border-b border-border/60 py-1">
+                    <span>{s.name || "(empty)"}</span>
+                    <span className="tabular-nums text-muted-foreground">{s.count} not added</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {report.duplicates.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-destructive">
+                Duplicated ISRC / Apple ID ({report.duplicateCount})
+              </h3>
+              <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-border">
+                {report.duplicates.map((d, i) => (
+                  <div key={`${d.title}-${i}`} className="border-b border-border/60 p-3 last:border-0">
+                    <p className="text-sm font-medium">{d.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {d.sublabel} · ISRC {d.isrc ?? "—"} · Apple ID {d.appleId ?? "—"} · duplicate {d.reason}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {report.errors.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-destructive">Other errors</h3>
+              <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                {report.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
+
+
+
       <div className="mt-8 min-w-56 space-y-2">
         <Label>Filter by sublabel</Label>
         <Select value={sublabelId || "all"} onValueChange={(v) => setSublabelId(v === "all" ? "" : v)}>
