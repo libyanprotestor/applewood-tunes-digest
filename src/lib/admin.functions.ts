@@ -58,9 +58,10 @@ export const deleteSublabel = createServerFn({ method: "POST" })
       .eq("sublabel_id", data.id);
     if (countError) throw new Error(countError.message);
     if ((count ?? 0) > 0)
-      throw new Error(
-        `This sublabel still has ${count} catalog item${count === 1 ? "" : "s"}. Delete or reassign them first.`,
-      );
+      return {
+        ok: false as const,
+        message: `This sublabel still has ${count} catalog item${count === 1 ? "" : "s"}. Delete or reassign them first.`,
+      };
 
     const { error } = await context.supabase.from("sublabels").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
