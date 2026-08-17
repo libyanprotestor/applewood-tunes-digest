@@ -30,6 +30,7 @@ export const Route = createFileRoute("/_authenticated/catalog")({
 });
 
 type Row = {
+  sublabel: string;
   title: string;
   artistName?: string;
   isrc?: string;
@@ -43,6 +44,7 @@ function parseCsv(text: string): Row[] {
   if (lines.length < 2) return [];
   const header = lines[0]!.split(",").map((h) => h.trim().toLowerCase());
   const idx = (names: string[]) => header.findIndex((h) => names.includes(h));
+  const iSublabel = idx(["sublabel", "sub label", "sub-label", "label"]);
   const iTitle = idx(["title", "name", "track"]);
   const iArtist = idx(["artist", "artist_name", "artistname"]);
   const iIsrc = idx(["isrc"]);
@@ -54,11 +56,13 @@ function parseCsv(text: string): Row[] {
   for (const line of lines.slice(1)) {
     const cells = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
     const title = iTitle >= 0 ? cells[iTitle] : undefined;
-    if (!title) continue;
+    const sublabel = iSublabel >= 0 ? cells[iSublabel] : undefined;
+    if (!title || !sublabel) continue;
     const raw = (iType >= 0 ? cells[iType] : "")?.toLowerCase() ?? "";
     const itemType: Row["itemType"] =
       raw === "ringtone" || raw === "album" || raw === "other" ? raw : "single";
     rows.push({
+      sublabel,
       title,
       ...(iArtist >= 0 && cells[iArtist] ? { artistName: cells[iArtist] } : {}),
       ...(iIsrc >= 0 && cells[iIsrc] ? { isrc: cells[iIsrc] } : {}),
@@ -86,11 +90,12 @@ function CatalogPage() {
   });
 
   const upload = useMutation({
-    mutationFn: () => importFn({ data: { sublabelId, rows } }),
+    mutationFn: () => importFn({ data: { rows } }),
     onSuccess: (res) => {
       setRows([]);
       void qc.invalidateQueries({ queryKey: ["items"] });
       toast.success(`Imported ${res.inserted} items${res.skipped ? `, ${res.skipped} skipped` : ""}`);
+      if (res.errors.length) toast.error(res.errors[0]!);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -101,30 +106,18 @@ function CatalogPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const sublabelCount = new Set(rows.map((r) => r.sublabel.toLowerCase())).size;
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="text-3xl font-semibold tracking-tight">Catalog</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Upload a CSV with columns: title, artist, isrc, upc, apple_id, type (ringtone / single / album).
-        Apple ID is Apple&apos;s numeric identifier used in streaming reports.
+        Upload a CSV with columns: sublabel, title, artist, isrc, upc, apple_id, type (ringtone / single / album).
+        Each row&apos;s sublabel column decides where the item lands, so one sheet can cover many sublabels.
+        Sublabel names must match existing sublabels.
       </p>
 
       <div className="mt-8 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-6">
-        <div className="min-w-56 space-y-2">
-          <Label>Sublabel</Label>
-          <Select value={sublabelId} onValueChange={setSublabelId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose a sublabel" />
-            </SelectTrigger>
-            <SelectContent>
-              {(sublabels.data ?? []).map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         <div className="min-w-56 flex-1 space-y-2">
           <Label htmlFor="csv">CSV file</Label>
           <Input
@@ -138,13 +131,28 @@ function CatalogPage() {
             }}
           />
         </div>
-        <Button
-          onClick={() => upload.mutate()}
-          disabled={!sublabelId || rows.length === 0 || upload.isPending}
-        >
-          Import {rows.length > 0 ? `${rows.length} rows` : ""}
+        <Button onClick={() => upload.mutate()} disabled={rows.length === 0 || upload.isPending}>
+          Import {rows.length > 0 ? `${rows.length} rows · ${sublabelCount} sublabels` : ""}
         </Button>
       </div>
+
+      <div className="mt-8 min-w-56 space-y-2">
+        <Label>Filter by sublabel</Label>
+        <Select value={sublabelId || "all"} onValueChange={(v) => setSublabelId(v === "all" ? "" : v)}>
+          <SelectTrigger>
+            <SelectValue placeholder="All sublabels" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sublabels</SelectItem>
+            {(sublabels.data ?? []).map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
 
       <div className="mt-8 divide-y divide-border rounded-2xl border border-border bg-card">
         {(items.data ?? []).length === 0 && (
