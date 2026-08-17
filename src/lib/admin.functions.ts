@@ -58,13 +58,14 @@ export const deleteSublabel = createServerFn({ method: "POST" })
       .eq("sublabel_id", data.id);
     if (countError) throw new Error(countError.message);
     if ((count ?? 0) > 0)
-      throw new Error(
-        `This sublabel still has ${count} catalog item${count === 1 ? "" : "s"}. Delete or reassign them first.`,
-      );
+      return {
+        ok: false as const,
+        message: `This sublabel still has ${count} catalog item${count === 1 ? "" : "s"}. Delete or reassign them first.`,
+      };
 
     const { error } = await context.supabase.from("sublabels").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true as const, message: "" };
   });
 
 
@@ -228,13 +229,14 @@ export const deleteItem = createServerFn({ method: "POST" })
     const saleCount = sales.count ?? 0;
     const streamCount = streams.count ?? 0;
     if (saleCount > 0 || streamCount > 0)
-      throw new Error(
-        `This item has ${saleCount} sale row${saleCount === 1 ? "" : "s"} and ${streamCount} stream row${streamCount === 1 ? "" : "s"} linked to it, so it can't be deleted.`,
-      );
+      return {
+        ok: false as const,
+        message: `This item has ${saleCount} sale row${saleCount === 1 ? "" : "s"} and ${streamCount} stream row${streamCount === 1 ? "" : "s"} linked to it, so it can't be deleted.`,
+      };
 
     const { error } = await context.supabase.from("items").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true as const, message: "" };
   });
 
 

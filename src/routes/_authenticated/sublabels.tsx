@@ -102,7 +102,11 @@ function SublabelsPage() {
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteFn({ data: { id } }),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
       invalidate();
       toast.success("Sublabel deleted");
     },
