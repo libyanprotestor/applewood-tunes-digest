@@ -102,7 +102,14 @@ function CatalogPage() {
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteFn({ data: { id } }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["items"] }),
+    onSuccess: (res) => {
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
+      void qc.invalidateQueries({ queryKey: ["items"] });
+      toast.success("Item deleted");
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
