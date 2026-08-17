@@ -179,6 +179,7 @@ export const importItems = createServerFn({ method: "POST" })
         artist_name: row.artistName || null,
         isrc: row.isrc ? row.isrc.toUpperCase() : null,
         upc: row.upc ? row.upc.toUpperCase() : null,
+        apple_id: row.appleId || null,
         item_type: row.itemType,
       });
       if (error) errors.push(`${row.title}: ${error.message}`);
