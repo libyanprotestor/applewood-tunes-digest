@@ -152,6 +152,7 @@ export const listItems = createServerFn({ method: "POST" })
   });
 
 const csvItem = z.object({
+  sublabel: z.string().trim().min(1).max(120),
   title: z.string().trim().min(1).max(300),
   artistName: z.string().trim().max(300).optional(),
   isrc: z.string().trim().max(40).optional(),
@@ -160,21 +161,30 @@ const csvItem = z.object({
   itemType: z.enum(["ringtone", "single", "album", "other"]).default("single"),
 });
 
-/** Bulk-imports catalog rows parsed from a CSV in the browser. */
+/** Bulk-imports catalog rows parsed from a CSV in the browser; each row names its sublabel. */
 export const importItems = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ sublabelId: z.string().uuid(), rows: z.array(csvItem).min(1).max(5000) }).parse(input),
+    z.object({ rows: z.array(csvItem).min(1).max(5000) }).parse(input),
   )
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
 
+    const { data: subs, error: subsError } = await context.supabase.from("sublabels").select("id, name");
+    if (subsError) throw new Error(subsError.message);
+    const byName = new Map((subs ?? []).map((s) => [s.name.trim().toLowerCase(), s.id]));
+
     let inserted = 0;
     const errors: string[] = [];
     for (const row of data.rows) {
+      const sublabelId = byName.get(row.sublabel.toLowerCase());
+      if (!sublabelId) {
+        errors.push(`${row.title}: unknown sublabel "${row.sublabel}"`);
+        continue;
+      }
       const { error } = await context.supabase.from("items").insert({
-        sublabel_id: data.sublabelId,
+        sublabel_id: sublabelId,
         title: row.title,
         artist_name: row.artistName || null,
         isrc: row.isrc ? row.isrc.toUpperCase() : null,
@@ -187,6 +197,8 @@ export const importItems = createServerFn({ method: "POST" })
     }
     return { inserted, skipped: errors.length, errors: errors.slice(0, 25) };
   });
+
+
 
 export const deleteItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
