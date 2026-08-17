@@ -187,29 +187,85 @@ export const importItems = createServerFn({ method: "POST" })
     const { data: subs, error: subsError } = await context.supabase.from("sublabels").select("id, name");
     if (subsError) throw new Error(subsError.message);
     const byName = new Map((subs ?? []).map((s) => [s.name.trim().toLowerCase(), s.id]));
+    const nameById = new Map((subs ?? []).map((s) => [s.id, s.name]));
+
+    // existing catalog codes, to flag duplicates against the database
+    const { data: existing, error: existingError } = await context.supabase
+      .from("items")
+      .select("isrc, apple_id");
+    if (existingError) throw new Error(existingError.message);
+    const seenIsrc = new Set<string>();
+    const seenApple = new Set<string>();
+    for (const e of existing ?? []) {
+      if (e.isrc) seenIsrc.add(e.isrc.toUpperCase());
+      if (e.apple_id) seenApple.add(e.apple_id);
+    }
 
     let inserted = 0;
+    const perSublabel = new Map<string, number>();
+    const unknownSublabels = new Map<string, number>();
+    const duplicates: { title: string; sublabel: string; isrc: string | null; appleId: string | null; reason: string }[] = [];
     const errors: string[] = [];
+
     for (const row of data.rows) {
-      const sublabelId = byName.get(row.sublabel.toLowerCase());
+      const isrc = row.isrc ? row.isrc.toUpperCase() : null;
+      const appleId = row.appleId || null;
+
+      const sublabelId = byName.get(row.sublabel.trim().toLowerCase());
       if (!sublabelId) {
-        errors.push(`${row.title}: unknown sublabel "${row.sublabel}"`);
+        unknownSublabels.set(row.sublabel, (unknownSublabels.get(row.sublabel) ?? 0) + 1);
         continue;
       }
+
+      const dupIsrc = isrc ? seenIsrc.has(isrc) : false;
+      const dupApple = appleId ? seenApple.has(appleId) : false;
+      if (dupIsrc || dupApple) {
+        duplicates.push({
+          title: row.title,
+          sublabel: row.sublabel,
+          isrc,
+          appleId,
+          reason: dupIsrc && dupApple ? "ISRC and Apple ID" : dupIsrc ? "ISRC" : "Apple ID",
+        });
+        continue;
+      }
+
       const { error } = await context.supabase.from("items").insert({
         sublabel_id: sublabelId,
         title: row.title,
         artist_name: row.artistName || null,
-        isrc: row.isrc ? row.isrc.toUpperCase() : null,
+        isrc,
         upc: row.upc ? row.upc.toUpperCase() : null,
-        apple_id: row.appleId || null,
+        apple_id: appleId,
         item_type: row.itemType,
       });
-      if (error) errors.push(`${row.title}: ${error.message}`);
-      else inserted += 1;
+      if (error) {
+        errors.push(`${row.title}: ${error.message}`);
+        continue;
+      }
+      inserted += 1;
+      if (isrc) seenIsrc.add(isrc);
+      if (appleId) seenApple.add(appleId);
+      const label = nameById.get(sublabelId) ?? row.sublabel;
+      perSublabel.set(label, (perSublabel.get(label) ?? 0) + 1);
     }
-    return { inserted, skipped: errors.length, errors: errors.slice(0, 25) };
+
+    return {
+      totalRows: data.rows.length,
+      inserted,
+      perSublabel: [...perSublabel.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count),
+      unknownSublabels: [...unknownSublabels.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count),
+      skippedUnknownSublabel: [...unknownSublabels.values()].reduce((a, b) => a + b, 0),
+      duplicateCount: duplicates.length,
+      duplicates: duplicates.slice(0, 500),
+      errors: errors.slice(0, 50),
+    };
   });
+
 
 
 
