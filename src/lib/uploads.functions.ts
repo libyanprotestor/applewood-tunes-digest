@@ -10,7 +10,7 @@ export const createUpload = createServerFn({ method: "POST" })
     z
       .object({
         kind: z.enum(["album", "singles", "ringtones"]),
-        title: z.string().trim().min(1).max(300),
+        title: z.string().trim().max(300).optional(),
         artistName: z.string().trim().max(300).optional(),
         upc: z.string().trim().max(40).optional(),
         releaseDate: z.string().trim().max(10).optional(),
@@ -30,7 +30,7 @@ export const createUpload = createServerFn({ method: "POST" })
       sublabel_id: sublabelId,
       created_by: context.userId,
       kind: data.kind,
-      title: data.title,
+      title: data.title || "Untitled release",
       artist_name: data.artistName || null,
       upc: data.upc || null,
       release_date: data.releaseDate || null,
@@ -40,6 +40,96 @@ export const createUpload = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { id };
   });
+
+/**
+ * Records the structure the browser found inside the release zip: the album
+ * title from the sheet, one track row per song / ringtone folder, and the
+ * label defaults that pre-fill the Apple metadata.
+ */
+export const registerExtracted = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        uploadId: z.string().uuid(),
+        albumTitle: z.string().trim().min(1).max(300),
+        tracks: z
+          .array(
+            z.object({
+              folderNumber: z.number().int().min(1).nullable(),
+              title: z.string().trim().min(1).max(300),
+              audioFileId: z.string().uuid(),
+              artworkFileId: z.string().uuid().nullable(),
+            }),
+          )
+          .min(1)
+          .max(500),
+        warnings: z.array(z.string().max(400)).max(50).default([]),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: upload, error: loadError } = await context.supabase
+      .from("uploads")
+      .select("id, sublabel_id, sublabels(default_genre_code, default_language, default_label_name, default_copyright_owner, name)")
+      .eq("id", data.uploadId)
+      .maybeSingle();
+    if (loadError) throw new Error(loadError.message);
+    if (!upload) throw new Error("Upload not found");
+
+    const defaults = (upload.sublabels ?? {}) as {
+      default_genre_code?: string | null;
+      default_language?: string | null;
+      default_label_name?: string | null;
+      default_copyright_owner?: string | null;
+      name?: string;
+    };
+    const year = new Date().getFullYear();
+    const owner = defaults.default_copyright_owner || defaults.default_label_name || defaults.name || "";
+
+    await context.supabase.from("upload_tracks").delete().eq("upload_id", data.uploadId);
+    const rows = data.tracks.map((t, i) => ({
+      upload_id: data.uploadId,
+      file_id: t.audioFileId,
+      artwork_file_id: t.artworkFileId,
+      folder_number: t.folderNumber,
+      track_number: i + 1,
+      title: t.title,
+    }));
+    const seeded = await context.supabase.from("upload_tracks").insert(rows);
+    if (seeded.error) throw new Error(seeded.error.message);
+
+    const { error } = await context.supabase
+      .from("uploads")
+      .update({
+        title: data.albumTitle,
+        status: "uploaded",
+        extract_error: data.warnings.length ? data.warnings.join(" ") : null,
+        genre_code: defaults.default_genre_code || null,
+        language: defaults.default_language || "en",
+        label_name: defaults.default_label_name || defaults.name || null,
+        copyright_pline: owner ? `${year} ${owner}` : null,
+        copyright_cline: owner ? `${year} ${owner}` : null,
+      })
+      .eq("id", data.uploadId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const, message: "Upload sent for review." };
+  });
+
+/** Stores a plain-language reason why a zip could not be unpacked. */
+export const setExtractError = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ uploadId: z.string().uuid(), message: z.string().trim().max(600) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await context.supabase
+      .from("uploads")
+      .update({ extract_error: data.message, status: "draft" })
+      .eq("id", data.uploadId);
+    return { ok: true as const };
+  });
+
 
 /** Mints the presigned URLs the browser uses to push a file straight to storage. */
 export const startFileUpload = createServerFn({ method: "POST" })
@@ -231,14 +321,14 @@ export const getUpload = createServerFn({ method: "POST" })
     const { data: upload, error } = await context.supabase
       .from("uploads")
       .select(
-        "id, kind, title, artist_name, upc, release_date, status, total_bytes, file_count, admin_notes, rejection_reason, created_at, sublabel_id, sublabels(name)",
+        "id, kind, title, artist_name, upc, release_date, status, total_bytes, file_count, admin_notes, rejection_reason, extract_error, genre_code, language, label_name, copyright_pline, copyright_cline, created_at, sublabel_id, sublabels(name)",
       )
       .eq("id", data.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!upload) throw new Error("Upload not found");
 
-    const [{ data: files }, { data: tracks }, { data: jobs }] = await Promise.all([
+    const [{ data: files }, { data: tracks }, { data: jobs }, { data: packages }] = await Promise.all([
       context.supabase
         .from("upload_files")
         .select("id, role, filename, storage_key, content_type, bytes")
@@ -246,7 +336,7 @@ export const getUpload = createServerFn({ method: "POST" })
         .order("filename"),
       context.supabase
         .from("upload_tracks")
-        .select("id, file_id, track_number, title, version, artist_name, isrc, explicit")
+        .select("id, file_id, artwork_file_id, folder_number, track_number, title, version, artist_name, isrc, explicit")
         .eq("upload_id", data.id)
         .order("track_number"),
       context.supabase
@@ -254,13 +344,25 @@ export const getUpload = createServerFn({ method: "POST" })
         .select("id, state, attempts, error_message, apple_ticket, created_at, finished_at")
         .eq("upload_id", data.id)
         .order("created_at", { ascending: false }),
+      context.supabase
+        .from("delivery_packages")
+        .select("id, job_id, vendor_id, title, state, apple_ticket, error_message, updated_at")
+        .eq("upload_id", data.id)
+        .order("vendor_id"),
     ]);
 
     const withUrls = await Promise.all(
       (files ?? []).map(async (f) => ({ ...f, url: await b2.previewUrl(f.storage_key) })),
     );
 
-    return { upload, files: withUrls, tracks: tracks ?? [], jobs: jobs ?? [] };
+    return {
+      upload,
+      files: withUrls,
+      tracks: tracks ?? [],
+      jobs: jobs ?? [],
+      packages: packages ?? [],
+    };
+
   });
 
 export const deleteUpload = createServerFn({ method: "POST" })

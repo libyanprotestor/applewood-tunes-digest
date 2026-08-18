@@ -356,6 +356,11 @@ export const adminEditUpload = createServerFn({ method: "POST" })
         artistName: z.string().trim().max(300).optional(),
         upc: z.string().trim().max(40).optional(),
         releaseDate: z.string().trim().max(10).optional(),
+        genreCode: z.string().trim().max(40).optional(),
+        language: z.string().trim().max(10).optional(),
+        labelName: z.string().trim().max(200).optional(),
+        copyrightPline: z.string().trim().max(300).optional(),
+        copyrightCline: z.string().trim().max(300).optional(),
       })
       .parse(input),
   )
@@ -370,8 +375,92 @@ export const adminEditUpload = createServerFn({ method: "POST" })
         artist_name: data.artistName || null,
         upc: data.upc || null,
         release_date: data.releaseDate || null,
+        genre_code: data.genreCode || null,
+        language: data.language || null,
+        label_name: data.labelName || null,
+        copyright_pline: data.copyrightPline || null,
+        copyright_cline: data.copyrightCline || null,
       })
       .eq("id", data.uploadId);
     if (error) throw new Error(error.message);
     return { ok: true as const, message: "Release details saved." };
   });
+
+/**
+ * Fills every missing code from the pool in one click: albums take the first
+ * free code as the album vendor id / UPC and each track the next code;
+ * ringtone releases give every folder its own code.
+ */
+export const assignCodesToUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ uploadId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: upload, error: upErr } = await context.supabase
+      .from("uploads")
+      .select("id, kind, upc")
+      .eq("id", data.uploadId)
+      .maybeSingle();
+    if (upErr) throw new Error(upErr.message);
+    if (!upload) throw new Error("Upload not found");
+
+    const { data: tracks, error } = await context.supabase
+      .from("upload_tracks")
+      .select("id, isrc, track_number")
+      .eq("upload_id", data.uploadId)
+      .order("track_number");
+    if (error) throw new Error(error.message);
+
+    const needsAlbumCode = upload.kind !== "ringtones" && !upload.upc;
+    const needy = (tracks ?? []).filter((t) => !t.isrc);
+    const wanted = needy.length + (needsAlbumCode ? 1 : 0);
+    if (wanted === 0) return { ok: true as const, message: "Every code is already filled in." };
+
+    const { data: free, error: freeError } = await context.supabase
+      .from("isrc_pool")
+      .select("id, code")
+      .is("used_by_track_id", null)
+      .order("code")
+      .limit(wanted);
+    if (freeError) throw new Error(freeError.message);
+    if ((free ?? []).length < wanted)
+      return {
+        ok: false as const,
+        message: `Only ${free?.length ?? 0} free code${free?.length === 1 ? "" : "s"} left in the pool but ${wanted} are needed. Import more codes first.`,
+      };
+
+    let cursor = 0;
+    let assigned = 0;
+    if (needsAlbumCode) {
+      const albumCode = free![cursor++]!;
+      const { error: albumErr } = await context.supabase
+        .from("uploads")
+        .update({ upc: albumCode.code })
+        .eq("id", data.uploadId);
+      if (albumErr) throw new Error(albumErr.message);
+      await context.supabase
+        .from("isrc_pool")
+        .update({ assigned_at: new Date().toISOString() })
+        .eq("id", albumCode.id);
+      assigned += 1;
+    }
+
+    for (const track of needy) {
+      const code = free![cursor++]!;
+      const claim = await context.supabase
+        .from("isrc_pool")
+        .update({ used_by_track_id: track.id, assigned_at: new Date().toISOString() })
+        .eq("id", code.id)
+        .is("used_by_track_id", null)
+        .select("id");
+      if (claim.error) throw new Error(claim.error.message);
+      if (!claim.data?.length) continue;
+      const upd = await context.supabase.from("upload_tracks").update({ isrc: code.code }).eq("id", track.id);
+      if (upd.error) throw new Error(upd.error.message);
+      assigned += 1;
+    }
+    return { ok: true as const, message: `Filled ${assigned} code${assigned === 1 ? "" : "s"}.` };
+  });
+

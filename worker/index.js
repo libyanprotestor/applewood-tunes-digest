@@ -13,7 +13,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createClient } from "@supabase/supabase-js";
-import { buildPackage } from "./package-builder.js";
+import { buildPackages } from "./package-builder.js";
 
 const env = (name, fallback) => {
   const value = process.env[name] ?? fallback;
@@ -91,15 +91,18 @@ async function processJob(jobId, uploadId) {
     await log(jobId, "Claimed job, loading release metadata.");
     const { data: upload, error: uploadError } = await supabase
       .from("uploads")
-      .select("id, kind, title, artist_name, upc, release_date, sublabel_id, sublabels(name)")
+      .select(
+        "id, kind, title, artist_name, upc, release_date, genre_code, language, label_name, copyright_pline, copyright_cline, sublabel_id, sublabels(name)",
+      )
       .eq("id", uploadId)
       .single();
     if (uploadError) throw new Error(uploadError.message);
+    if (!upload.artist_name) throw new Error("The artist name is required before delivery.");
 
     const [{ data: tracks }, { data: files }] = await Promise.all([
       supabase
         .from("upload_tracks")
-        .select("id, file_id, track_number, title, version, artist_name, isrc, explicit")
+        .select("id, file_id, artwork_file_id, folder_number, track_number, title, version, artist_name, isrc, explicit")
         .eq("upload_id", uploadId)
         .order("track_number"),
       supabase.from("upload_files").select("id, role, filename, storage_key").eq("upload_id", uploadId),
@@ -107,24 +110,31 @@ async function processJob(jobId, uploadId) {
 
     if (!tracks?.length) throw new Error("The metadata sheet is empty.");
     const byId = new Map((files ?? []).map((f) => [f.id, f]));
-    const artworkFile = (files ?? []).find((f) => f.role === "artwork");
+    const fallbackArtwork = (files ?? []).find((f) => f.role === "artwork") ?? null;
 
     await setJob(jobId, { state: "packaging" });
     await setUpload(uploadId, { status: "packaging" });
 
     const audioNames = [];
+    const artworkNames = [];
+    const downloaded = new Set();
+    const fetchOnce = async (file) => {
+      if (!downloaded.has(file.filename)) {
+        await log(jobId, `Downloading ${file.filename}`);
+        await download(file.storage_key, path.join(workDir, file.filename));
+        downloaded.add(file.filename);
+      }
+      return file.filename;
+    };
+
     for (const track of tracks) {
-      const file = byId.get(track.file_id);
-      if (!file) throw new Error(`Track "${track.title}" has no audio file.`);
+      const audio = byId.get(track.file_id);
+      if (!audio) throw new Error(`Track "${track.title}" has no audio file.`);
       if (!track.isrc) throw new Error(`Track "${track.title}" has no ISRC.`);
-      await log(jobId, `Downloading ${file.filename}`);
-      await download(file.storage_key, path.join(workDir, file.filename));
-      audioNames.push(file.filename);
+      audioNames.push(await fetchOnce(audio));
+      const art = track.artwork_file_id ? byId.get(track.artwork_file_id) : fallbackArtwork;
+      artworkNames.push(art ? await fetchOnce(art) : null);
       await renewLease(jobId);
-    }
-    if (artworkFile) {
-      await log(jobId, `Downloading ${artworkFile.filename}`);
-      await download(artworkFile.storage_key, path.join(workDir, artworkFile.filename));
     }
 
     const release = {
@@ -133,42 +143,65 @@ async function processJob(jobId, uploadId) {
       artist_name: upload.artist_name,
       upc: upload.upc,
       release_date: upload.release_date,
-      label_name: upload.sublabels?.name ?? PROVIDER,
+      genre_code: upload.genre_code || "POP-00",
+      language: upload.language || "en",
+      label_name: upload.label_name || upload.sublabels?.name || PROVIDER,
+      copyright_pline: upload.copyright_pline || "",
+      copyright_cline: upload.copyright_cline || "",
       provider: PROVIDER,
-      vendor_id: tracks[0].isrc,
+      vendor_id: upload.upc || tracks[0].isrc,
     };
 
-    await log(jobId, `Building ${upload.kind} package.`);
-    const itmsp = await buildPackage(workDir, release, tracks, audioNames, artworkFile?.filename ?? null);
-    await log(jobId, `Package ready: ${path.basename(itmsp)}`);
+    await log(jobId, `Building ${upload.kind} package(s).`);
+    const packages = await buildPackages(workDir, release, tracks, audioNames, artworkNames);
+    await log(jobId, `${packages.length} package(s) ready.`);
 
     await setJob(jobId, { state: "uploading" });
     await setUpload(uploadId, { status: "delivering" });
-    await renewLease(jobId);
 
-    const transporterOutput = await run(
-      TRANSPORTER,
-      [
-        "-m",
-        "upload",
-        "-u",
-        APPLE_USER,
-        "-p",
-        APPLE_PASSWORD,
-        "-f",
-        itmsp,
-        "-k",
-        "100000",
-        "-WONoPause",
-        "true",
-      ],
-      (line) => void log(jobId, line),
-    );
+    const failures = [];
+    for (const pkg of packages) {
+      await supabase.from("delivery_packages").upsert(
+        {
+          upload_id: uploadId,
+          job_id: jobId,
+          vendor_id: pkg.vendorId,
+          title: pkg.title,
+          state: "uploading",
+          error_message: null,
+        },
+        { onConflict: "job_id,vendor_id" },
+      );
+      await renewLease(jobId);
+      try {
+        const output = await run(
+          TRANSPORTER,
+          ["-m", "upload", "-u", APPLE_USER, "-p", APPLE_PASSWORD, "-f", pkg.dir, "-k", "100000", "-WONoPause", "true"],
+          (line) => void log(jobId, `${pkg.vendorId}: ${line}`),
+        );
+        const ticket = output.match(/[Tt]ransaction[ _]?[Ii][Dd][:= ]+([\w-]+)/)?.[1] ?? null;
+        await supabase
+          .from("delivery_packages")
+          .update({ state: "succeeded", apple_ticket: ticket, error_message: null })
+          .eq("job_id", jobId)
+          .eq("vendor_id", pkg.vendorId);
+        await log(jobId, `${pkg.vendorId}: accepted by Apple${ticket ? ` (ticket ${ticket})` : ""}.`, "success");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push(`${pkg.vendorId}: ${message}`);
+        await supabase
+          .from("delivery_packages")
+          .update({ state: "failed", error_message: message })
+          .eq("job_id", jobId)
+          .eq("vendor_id", pkg.vendorId);
+        await log(jobId, `${pkg.vendorId}: rejected — ${message}`, "error");
+      }
+    }
 
-    const ticket = transporterOutput.match(/[Tt]ransaction[ _]?[Ii][Dd][:= ]+([\w-]+)/)?.[1] ?? null;
+    if (failures.length) throw new Error(failures.join(" | "));
+
     await setJob(jobId, {
-      state: "delivered",
-      apple_ticket: ticket,
+      state: "succeeded",
       error_message: null,
       finished_at: new Date().toISOString(),
     });

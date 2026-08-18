@@ -120,6 +120,60 @@ export type Database = {
           },
         ]
       }
+      delivery_packages: {
+        Row: {
+          apple_ticket: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          job_id: string
+          state: Database["public"]["Enums"]["delivery_state"]
+          title: string | null
+          updated_at: string
+          upload_id: string
+          vendor_id: string
+        }
+        Insert: {
+          apple_ticket?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_id: string
+          state?: Database["public"]["Enums"]["delivery_state"]
+          title?: string | null
+          updated_at?: string
+          upload_id: string
+          vendor_id: string
+        }
+        Update: {
+          apple_ticket?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_id?: string
+          state?: Database["public"]["Enums"]["delivery_state"]
+          title?: string | null
+          updated_at?: string
+          upload_id?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_packages_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_packages_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       isrc_pool: {
         Row: {
           assigned_at: string | null
@@ -440,6 +494,10 @@ export type Database = {
         Row: {
           contact_email: string | null
           created_at: string
+          default_copyright_owner: string | null
+          default_genre_code: string | null
+          default_label_name: string | null
+          default_language: string | null
           id: string
           is_active: boolean
           name: string
@@ -449,6 +507,10 @@ export type Database = {
         Insert: {
           contact_email?: string | null
           created_at?: string
+          default_copyright_owner?: string | null
+          default_genre_code?: string | null
+          default_label_name?: string | null
+          default_language?: string | null
           id?: string
           is_active?: boolean
           name: string
@@ -458,6 +520,10 @@ export type Database = {
         Update: {
           contact_email?: string | null
           created_at?: string
+          default_copyright_owner?: string | null
+          default_genre_code?: string | null
+          default_label_name?: string | null
+          default_language?: string | null
           id?: string
           is_active?: boolean
           name?: string
@@ -658,9 +724,11 @@ export type Database = {
       upload_tracks: {
         Row: {
           artist_name: string | null
+          artwork_file_id: string | null
           created_at: string
           explicit: boolean
           file_id: string | null
+          folder_number: number | null
           id: string
           isrc: string | null
           title: string
@@ -671,9 +739,11 @@ export type Database = {
         }
         Insert: {
           artist_name?: string | null
+          artwork_file_id?: string | null
           created_at?: string
           explicit?: boolean
           file_id?: string | null
+          folder_number?: number | null
           id?: string
           isrc?: string | null
           title: string
@@ -684,9 +754,11 @@ export type Database = {
         }
         Update: {
           artist_name?: string | null
+          artwork_file_id?: string | null
           created_at?: string
           explicit?: boolean
           file_id?: string | null
+          folder_number?: number | null
           id?: string
           isrc?: string | null
           title?: string
@@ -696,6 +768,13 @@ export type Database = {
           version?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "upload_tracks_artwork_file_id_fkey"
+            columns: ["artwork_file_id"]
+            isOneToOne: false
+            referencedRelation: "upload_files"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "upload_tracks_file_id_fkey"
             columns: ["file_id"]
@@ -716,11 +795,17 @@ export type Database = {
         Row: {
           admin_notes: string | null
           artist_name: string | null
+          copyright_cline: string | null
+          copyright_pline: string | null
           created_at: string
           created_by: string | null
+          extract_error: string | null
           file_count: number
+          genre_code: string | null
           id: string
           kind: Database["public"]["Enums"]["upload_kind"]
+          label_name: string | null
+          language: string | null
           rejection_reason: string | null
           release_date: string | null
           status: Database["public"]["Enums"]["upload_status"]
@@ -734,11 +819,17 @@ export type Database = {
         Insert: {
           admin_notes?: string | null
           artist_name?: string | null
+          copyright_cline?: string | null
+          copyright_pline?: string | null
           created_at?: string
           created_by?: string | null
+          extract_error?: string | null
           file_count?: number
+          genre_code?: string | null
           id?: string
           kind: Database["public"]["Enums"]["upload_kind"]
+          label_name?: string | null
+          language?: string | null
           rejection_reason?: string | null
           release_date?: string | null
           status?: Database["public"]["Enums"]["upload_status"]
@@ -752,11 +843,17 @@ export type Database = {
         Update: {
           admin_notes?: string | null
           artist_name?: string | null
+          copyright_cline?: string | null
+          copyright_pline?: string | null
           created_at?: string
           created_by?: string | null
+          extract_error?: string | null
           file_count?: number
+          genre_code?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["upload_kind"]
+          label_name?: string | null
+          language?: string | null
           rejection_reason?: string | null
           release_date?: string | null
           status?: Database["public"]["Enums"]["upload_status"]

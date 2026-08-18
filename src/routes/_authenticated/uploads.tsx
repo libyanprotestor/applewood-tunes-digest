@@ -7,13 +7,15 @@ import {
   createUpload,
   finishFileUpload,
   listUploads,
+  registerExtracted,
+  setExtractError,
   startFileUpload,
   storageStatus,
-  submitUpload,
 } from "@/lib/uploads.functions";
 import { getViewer } from "@/lib/analytics.functions";
 import { listSublabels } from "@/lib/admin.functions";
 import { formatBytes, pushFile } from "@/lib/upload-client";
+import { parseReleaseZip, readZip, type Extracted } from "@/lib/zip-parse";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 
 export const Route = createFileRoute("/_authenticated/uploads")({
   head: () => ({
@@ -47,9 +50,9 @@ export const Route = createFileRoute("/_authenticated/uploads")({
 
 const kinds = [
   { id: "album", label: "Album" },
-  { id: "singles", label: "Singles" },
   { id: "ringtones", label: "Ringtones" },
 ] as const;
+
 
 const statuses = [
   "all",
@@ -97,25 +100,42 @@ function UploadsPage() {
   const createFn = useServerFn(createUpload);
   const startFn = useServerFn(startFileUpload);
   const finishFn = useServerFn(finishFileUpload);
-  const submitFn = useServerFn(submitUpload);
+  const registerFn = useServerFn(registerExtracted);
+  const extractErrorFn = useServerFn(setExtractError);
 
   const [kind, setKind] = useState<(typeof kinds)[number]["id"]>("album");
-  const [title, setTitle] = useState("");
-  const [artist, setArtist] = useState("");
   const [sublabelId, setSublabelId] = useState<string>("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [zip, setZip] = useState<File | null>(null);
+  const [parsed, setParsed] = useState<Extracted | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
 
-  const totalBytes = files.reduce((a, f) => a + f.size, 0);
-
-  async function handleUpload() {
-    if (!title.trim()) {
-      toast.error("Give the release a title.");
+  async function handlePick(file: File | null) {
+    setZip(file);
+    setParsed(null);
+    setParseError(null);
+    setProgress({});
+    if (!file) return;
+    if (!/\.zip$/i.test(file.name)) {
+      setParseError("Please pick a .zip file.");
       return;
     }
-    if (files.length === 0) {
-      toast.error("Pick the audio files and the cover artwork.");
+    setBusy(true);
+    try {
+      const result = parseReleaseZip(file, await readZip(file), kind);
+      setParsed(result);
+      result.warnings.forEach((w) => toast.warning(w));
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "That zip could not be read.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpload() {
+    if (!zip || !parsed) {
+      toast.error("Pick a zip file first.");
       return;
     }
     if (isAdmin && !sublabelId) {
@@ -123,67 +143,79 @@ function UploadsPage() {
       return;
     }
 
-
     setBusy(true);
     setProgress({});
+    let uploadId: string | null = null;
     try {
       const { id } = await createFn({
-        data: {
-          kind,
-          title: title.trim(),
-          artistName: artist.trim() || undefined,
-          ...(isAdmin && sublabelId ? { sublabelId } : {}),
-        },
+        data: { kind, title: parsed.albumTitle, ...(isAdmin && sublabelId ? { sublabelId } : {}) },
       });
+      uploadId = id;
 
-      for (const file of files) {
+      const fileIds = new Map<string, string>();
+      for (const item of parsed.files) {
         const start = await startFn({
           data: {
             uploadId: id,
-            filename: file.name,
-            contentType: file.type || "application/octet-stream",
-            bytes: file.size,
+            filename: item.name,
+            contentType: item.blob.type || "application/octet-stream",
+            bytes: item.blob.size,
           },
         });
-        const { parts } = await pushFile(file, start, (fraction) =>
-          setProgress((p) => ({ ...p, [file.name]: fraction })),
+        const { parts } = await pushFile(item.blob, start, (fraction) =>
+          setProgress((p) => ({ ...p, [item.name]: fraction })),
         );
-        await finishFn({
+        const saved = await finishFn({
           data: {
             uploadId: id,
             key: start.key,
             filename: start.filename,
-            contentType: file.type || "application/octet-stream",
-            bytes: file.size,
-            role: start.role,
+            contentType: item.blob.type || "application/octet-stream",
+            bytes: item.blob.size,
+            role: item.role,
             multipartId: start.multipartId,
             parts,
           },
         });
-        setProgress((p) => ({ ...p, [file.name]: 1 }));
+        fileIds.set(item.path, saved.id);
+        setProgress((p) => ({ ...p, [item.name]: 1 }));
       }
 
-      const result = await submitFn({ data: { uploadId: id } });
-      if (!result.ok) toast.warning(result.message);
-      else toast.success("Upload sent for review.");
+      const result = await registerFn({
+        data: {
+          uploadId: id,
+          albumTitle: parsed.albumTitle,
+          warnings: parsed.warnings,
+          tracks: parsed.tracks.map((t) => ({
+            folderNumber: t.folder,
+            title: t.title,
+            audioFileId: fileIds.get(t.audioPath)!,
+            artworkFileId: t.artworkPath ? (fileIds.get(t.artworkPath) ?? null) : null,
+          })),
+        },
+      });
+      toast.success(result.message);
 
-      setTitle("");
-      setArtist("");
-      setFiles([]);
+      setZip(null);
+      setParsed(null);
       setProgress({});
       await qc.invalidateQueries({ queryKey: ["uploads"] });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Upload failed.");
+      const message = error instanceof Error ? error.message : "Upload failed.";
+      toast.error(message);
+      if (uploadId) await extractErrorFn({ data: { uploadId, message } }).catch(() => undefined);
     } finally {
       setBusy(false);
     }
   }
 
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-semibold tracking-tight">Release uploads</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Files go straight from this browser to secure storage, then packaging and Apple delivery happen automatically.
+        Drop one zip per release. It is unpacked here, checked against the sheet inside it, and sent straight to
+        secure storage for the label to review.
       </p>
 
       {storage.data && !storage.data.configured && (
@@ -194,10 +226,18 @@ function UploadsPage() {
 
       <section className="mt-8 rounded-2xl border border-border bg-card p-6">
         <h2 className="text-sm font-semibold">New release</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <Label className="text-xs">Type</Label>
-            <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+            <Select
+              value={kind}
+              onValueChange={(v) => {
+                setKind(v as typeof kind);
+                setParsed(null);
+                setParseError(null);
+                setZip(null);
+              }}
+            >
               <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>
@@ -209,14 +249,6 @@ function UploadsPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Title</Label>
-            <Input className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-          <div>
-            <Label className="text-xs">Artist (optional)</Label>
-            <Input className="mt-1" value={artist} onChange={(e) => setArtist(e.target.value)} />
           </div>
           {isAdmin && (
             <div>
@@ -238,39 +270,66 @@ function UploadsPage() {
         </div>
 
         <div className="mt-4">
-          <Label className="text-xs">Audio, artwork and any sheet</Label>
+          <Label className="text-xs">Release zip</Label>
           <Input
             type="file"
-            multiple
+            accept=".zip,application/zip"
             className="mt-1"
-            onChange={(e) => setFiles([...(e.target.files ?? [])])}
+            onChange={(e) => void handlePick(e.target.files?.[0] ?? null)}
             disabled={busy}
           />
-          {files.length > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {kind === "album"
+              ? "Album zip: a folder with the songs and the cover, plus a sheet whose first row is the album title and the rows below are the song titles."
+              : "Ringtone zip: a folder holding the sheet and folders numbered 1…n, each with one ringtone and one picture."}
+          </p>
+        </div>
+
+        {parseError && (
+          <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+            {parseError}
+          </p>
+        )}
+
+        {parsed && (
+          <div className="mt-4 rounded-xl border border-border bg-secondary/40 p-4">
+            <p className="text-sm font-medium">{parsed.albumTitle}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {parsed.tracks.length} {kind === "album" ? "songs" : "ringtones"} ·{" "}
+              {parsed.files.filter((f) => f.role === "artwork").length} images ·{" "}
+              {formatBytes(parsed.files.reduce((a, f) => a + f.blob.size, 0))}
+            </p>
+            {parsed.warnings.length > 0 && (
+              <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground">
+                {parsed.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            )}
             <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto text-xs">
-              {files.map((f) => (
+              {parsed.files.map((f) => (
                 <li key={f.name} className="flex items-center justify-between gap-3">
-                  <span className="truncate">{f.name}</span>
+                  <span className="truncate">
+                    {f.folder ? `${f.folder} · ` : ""}
+                    {f.name}
+                  </span>
                   <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {formatBytes(f.size)}
-                    {progress[f.name] !== undefined
-                      ? ` · ${Math.round((progress[f.name] ?? 0) * 100)}%`
-                      : ""}
+                    {formatBytes(f.blob.size)}
+                    {progress[f.name] !== undefined ? ` · ${Math.round((progress[f.name] ?? 0) * 100)}%` : ""}
                   </span>
                 </li>
               ))}
             </ul>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="mt-4 flex items-center gap-3">
-          <Button onClick={handleUpload} disabled={busy}>
-            {busy ? "Uploading…" : "Upload and submit"}
+          <Button onClick={handleUpload} disabled={busy || !parsed}>
+            {busy ? "Working…" : "Upload and submit"}
           </Button>
-          {files.length > 0 && (
-            <span className="text-xs text-muted-foreground">{formatBytes(totalBytes)} total</span>
-          )}
+          {zip && <span className="text-xs text-muted-foreground">{zip.name}</span>}
         </div>
+
       </section>
 
       <section className="mt-8 rounded-2xl border border-border bg-card">

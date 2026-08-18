@@ -7,7 +7,7 @@ import { getUpload, deleteUpload, deleteUploadFile } from "@/lib/uploads.functio
 import {
   adminEditUpload,
   applyArtistToAll,
-  assignIsrcsToUpload,
+  assignCodesToUpload,
   deliveryLogs,
   queueDelivery,
   releaseIsrcsForUpload,
@@ -15,6 +15,7 @@ import {
   saveSheet,
   setUploadStatus,
 } from "@/lib/delivery.functions";
+
 import { getViewer } from "@/lib/analytics.functions";
 import { formatBytes } from "@/lib/upload-client";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ export const Route = createFileRoute("/_authenticated/uploads/$id")({
 
 type TrackRow = {
   id: string;
+  folderNumber: number | null;
   trackNumber: number;
   title: string;
   version: string;
@@ -57,6 +59,13 @@ type TrackRow = {
   isrc: string;
   explicit: boolean;
 };
+
+function toCsv(rows: string[][]) {
+  return rows
+    .map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(","))
+    .join("\n");
+}
+
 
 function UploadDetail() {
   const { id } = Route.useParams();
@@ -73,6 +82,11 @@ function UploadDetail() {
   const [upc, setUpc] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [genre, setGenre] = useState("");
+  const [language, setLanguage] = useState("");
+  const [labelName, setLabelName] = useState("");
+  const [pline, setPline] = useState("");
+  const [cline, setCline] = useState("");
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -84,9 +98,15 @@ function UploadDetail() {
     setUpc(detail.data.upload.upc ?? "");
     setReleaseDate(detail.data.upload.release_date ?? "");
     setNotes(detail.data.upload.admin_notes ?? "");
+    setGenre(detail.data.upload.genre_code ?? "");
+    setLanguage(detail.data.upload.language ?? "");
+    setLabelName(detail.data.upload.label_name ?? "");
+    setPline(detail.data.upload.copyright_pline ?? "");
+    setCline(detail.data.upload.copyright_cline ?? "");
     setTracks(
       detail.data.tracks.map((t) => ({
         id: t.id,
+        folderNumber: t.folder_number ?? null,
         trackNumber: t.track_number ?? 1,
         title: t.title ?? "",
         version: t.version ?? "",
@@ -99,7 +119,8 @@ function UploadDetail() {
 
   const saveFn = useServerFn(saveSheet);
   const artistFn = useServerFn(applyArtistToAll);
-  const assignFn = useServerFn(assignIsrcsToUpload);
+  const assignFn = useServerFn(assignCodesToUpload);
+
   const releaseFn = useServerFn(releaseIsrcsForUpload);
   const queueFn = useServerFn(queueDelivery);
   const statusFn = useServerFn(setUploadStatus);
@@ -136,7 +157,7 @@ function UploadDetail() {
   if (detail.isLoading) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Loading…</main>;
   if (!detail.data) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Upload not found.</main>;
 
-  const { upload, files, jobs } = detail.data;
+  const { upload, files, jobs, packages } = detail.data;
   const artwork = files.filter((f) => f.role === "artwork");
   const audio = files.filter((f) => f.role === "audio");
   const docs = files.filter((f) => f.role !== "audio" && f.role !== "artwork");
@@ -209,6 +230,12 @@ function UploadDetail() {
       {isAdmin && upload.status !== "ready" && (
         <p className="mt-4 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
           This release is not approved yet. Review the files and the sheet, then press Approve to unlock delivery.
+        </p>
+      )}
+
+      {upload.extract_error && (
+        <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+          Zip problem: {upload.extract_error}
         </p>
       )}
 
@@ -322,6 +349,26 @@ function UploadDetail() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label className="text-xs">Genre code</Label>
+              <Input className="mt-1" value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="RINGTONES-00" />
+            </div>
+            <div>
+              <Label className="text-xs">Language</Label>
+              <Input className="mt-1" value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="en" />
+            </div>
+            <div>
+              <Label className="text-xs">Label name</Label>
+              <Input className="mt-1" value={labelName} onChange={(e) => setLabelName(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">℗ line</Label>
+              <Input className="mt-1" value={pline} onChange={(e) => setPline(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">© line</Label>
+              <Input className="mt-1" value={cline} onChange={(e) => setCline(e.target.value)} />
+            </div>
             <div className="flex items-end">
               <Button
                 disabled={busy || !title.trim()}
@@ -335,6 +382,11 @@ function UploadDetail() {
                         artistName: artist || undefined,
                         upc: upc || undefined,
                         releaseDate: releaseDate || undefined,
+                        genreCode: genre || undefined,
+                        language: language || undefined,
+                        labelName: labelName || undefined,
+                        copyrightPline: pline || undefined,
+                        copyrightCline: cline || undefined,
                       },
                     }),
                   )
@@ -369,9 +421,35 @@ function UploadDetail() {
                 variant="outline"
                 size="sm"
                 disabled={busy}
-                onClick={() => run("ISRCs assigned", () => assignFn({ data: { uploadId: id } }))}
+                onClick={() => run("Codes assigned", () => assignFn({ data: { uploadId: id } }))}
               >
-                Assign ISRCs
+                Fill ISRC &amp; UPC
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const csv = toCsv([
+                    ["Folder", "Track", "Title", "Version", "Artist", "ISRC", "Explicit"],
+                    ...tracks.map((t) => [
+                      t.folderNumber ? String(t.folderNumber) : "",
+                      String(t.trackNumber),
+                      t.title,
+                      t.version,
+                      t.artistName || artist,
+                      t.isrc,
+                      t.explicit ? "yes" : "no",
+                    ]),
+                  ]);
+                  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `${title || "release"}-sheet.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                Download sheet
               </Button>
               <Button
                 variant="ghost"
@@ -538,6 +616,26 @@ function UploadDetail() {
               Delete upload
             </Button>
           </div>
+        </section>
+      )}
+
+      {packages.length > 0 && (
+        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <h2 className="text-sm font-semibold">Packages sent to Apple</h2>
+          <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto text-sm">
+            {packages.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-3">
+                <span className="truncate">
+                  {p.vendor_id}.itmsp · {p.title}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {p.state}
+                  {p.apple_ticket ? ` · ticket ${p.apple_ticket}` : ""}
+                  {p.error_message ? ` · ${p.error_message}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
