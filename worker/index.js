@@ -106,6 +106,15 @@ function run(command, args, onLine) {
   });
 }
 
+async function isApproved(jobId) {
+  const { data } = await supabase
+    .from("delivery_jobs")
+    .select("approved_for_delivery")
+    .eq("id", jobId)
+    .single();
+  return Boolean(data?.approved_for_delivery);
+}
+
 async function processJob(jobId, uploadId) {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "delivery-"));
   try {
@@ -176,6 +185,30 @@ async function processJob(jobId, uploadId) {
     await log(jobId, `Building ${upload.kind} package(s).`);
     const packages = await buildPackages(workDir, release, tracks, audioNames, artworkNames);
     await log(jobId, `${packages.length} package(s) ready.`);
+
+    // Record what was built so the admin can review the exact package contents.
+    for (const pkg of packages) {
+      await supabase.from("delivery_packages").upsert(
+        {
+          upload_id: uploadId,
+          job_id: jobId,
+          vendor_id: pkg.vendorId,
+          title: pkg.title,
+          state: "awaiting_approval",
+          error_message: null,
+          metadata_xml: pkg.xml ?? null,
+          manifest: { files: pkg.assets ?? [], folder: `${pkg.vendorId}.itmsp` },
+        },
+        { onConflict: "job_id,vendor_id" },
+      );
+    }
+
+    if (!(await isApproved(jobId))) {
+      await setJob(jobId, { state: "awaiting_approval" });
+      await setUpload(uploadId, { status: "awaiting_approval" });
+      await log(jobId, "Packages built — waiting for admin approval before uploading to Apple.", "success");
+      return;
+    }
 
     await setJob(jobId, { state: "uploading" });
     await setUpload(uploadId, { status: "delivering" });
