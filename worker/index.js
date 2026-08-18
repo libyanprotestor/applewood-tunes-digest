@@ -258,6 +258,10 @@ async function processJob(jobId, uploadId) {
     await log(jobId, `Building ${upload.kind} package(s).`);
     const packages = await buildPackages(workDir, release, tracks, audioNames, artworkNames);
     await log(jobId, `${packages.length} package(s) ready.`);
+    await fs.writeFile(
+      path.join(workDir, "packages.json"),
+      JSON.stringify(packages.map((p) => ({ dir: p.dir, vendorId: p.vendorId, title: p.title }))),
+    );
 
     // Record what was built so the admin can review the exact package contents.
     for (const pkg of packages) {
@@ -277,72 +281,72 @@ async function processJob(jobId, uploadId) {
     }
 
     if (!(await isApproved(jobId))) {
+      paused = true; // keep the built packages on disk for the approved run
       await setJob(jobId, { state: "awaiting_approval" });
       await setUpload(uploadId, { status: "awaiting_approval" });
       await log(jobId, "Packages built — waiting for admin approval before uploading to Apple.", "success");
       return;
     }
 
-    await setJob(jobId, { state: "uploading" });
-    await setUpload(uploadId, { status: "delivering" });
-
-    const failures = [];
-    for (const pkg of packages) {
-      await supabase.from("delivery_packages").upsert(
-        {
-          upload_id: uploadId,
-          job_id: jobId,
-          vendor_id: pkg.vendorId,
-          title: pkg.title,
-          state: "uploading",
-          error_message: null,
-        },
-        { onConflict: "job_id,vendor_id" },
-      );
-      await renewLease(jobId);
-      try {
-        const output = await run(
-          TRANSPORTER,
-          ["-m", "upload", "-u", APPLE_USER, "-p", APPLE_PASSWORD, "-f", pkg.dir, "-k", "100000", "-WONoPause", "true"],
-          (line) => void log(jobId, `${pkg.vendorId}: ${line}`),
-        );
-        const ticket = output.match(/[Tt]ransaction[ _]?[Ii][Dd][:= ]+([\w-]+)/)?.[1] ?? null;
-        await supabase
-          .from("delivery_packages")
-          .update({ state: "succeeded", apple_ticket: ticket, error_message: null })
-          .eq("job_id", jobId)
-          .eq("vendor_id", pkg.vendorId);
-        await log(jobId, `${pkg.vendorId}: accepted by Apple${ticket ? ` (ticket ${ticket})` : ""}.`, "success");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        failures.push(`${pkg.vendorId}: ${message}`);
-        await supabase
-          .from("delivery_packages")
-          .update({ state: "failed", error_message: message })
-          .eq("job_id", jobId)
-          .eq("vendor_id", pkg.vendorId);
-        await log(jobId, `${pkg.vendorId}: rejected — ${message}`, "error");
-      }
-    }
-
-    if (failures.length) throw new Error(failures.join(" | "));
-
-    await setJob(jobId, {
-      state: "succeeded",
-      error_message: null,
-      finished_at: new Date().toISOString(),
-    });
-    await setUpload(uploadId, { status: "delivered" });
-    await log(jobId, "Delivered to Apple.", "success");
+    await uploadPackages(jobId, uploadId, packages);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await log(jobId, `Failed: ${message}`, "error");
     await setJob(jobId, { state: "failed", error_message: message, finished_at: new Date().toISOString() });
     await setUpload(uploadId, { status: "ready" });
   } finally {
-    await fs.rm(workDir, { recursive: true, force: true });
+    if (!paused) await fs.rm(workDir, { recursive: true, force: true });
   }
 }
+
+async function uploadPackages(jobId, uploadId, packages) {
+  await setJob(jobId, { state: "uploading" });
+  await setUpload(uploadId, { status: "delivering" });
+
+  const failures = [];
+  for (const pkg of packages) {
+    await supabase
+      .from("delivery_packages")
+      .update({ state: "uploading", error_message: null })
+      .eq("job_id", jobId)
+      .eq("vendor_id", pkg.vendorId);
+    await renewLease(jobId);
+    try {
+      const output = await run(
+        TRANSPORTER,
+        ["-m", "upload", "-u", APPLE_USER, "-p", APPLE_PASSWORD, "-f", pkg.dir, "-k", "100000", "-WONoPause", "true"],
+        (line) => void log(jobId, `${pkg.vendorId}: ${line}`),
+      );
+      const ticket = output.match(/[Tt]ransaction[ _]?[Ii][Dd][:= ]+([\w-]+)/)?.[1] ?? null;
+      await supabase
+        .from("delivery_packages")
+        .update({ state: "succeeded", apple_ticket: ticket, error_message: null })
+        .eq("job_id", jobId)
+        .eq("vendor_id", pkg.vendorId);
+      await log(jobId, `${pkg.vendorId}: accepted by Apple${ticket ? ` (ticket ${ticket})` : ""}.`, "success");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`${pkg.vendorId}: ${message}`);
+      await supabase
+        .from("delivery_packages")
+        .update({ state: "failed", error_message: message })
+        .eq("job_id", jobId)
+        .eq("vendor_id", pkg.vendorId);
+      await log(jobId, `${pkg.vendorId}: rejected — ${message}`, "error");
+    }
+  }
+
+  if (failures.length) throw new Error(failures.join(" | "));
+
+  await setJob(jobId, {
+    state: "succeeded",
+    error_message: null,
+    finished_at: new Date().toISOString(),
+  });
+  await setUpload(uploadId, { status: "delivered" });
+  await log(jobId, "Delivered to Apple.", "success");
+}
+
 
 /** Makes sure we still hold a valid access token before every poll. */
 async function ensureSession() {
