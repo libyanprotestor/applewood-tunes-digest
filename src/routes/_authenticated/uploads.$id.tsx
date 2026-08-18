@@ -157,7 +157,7 @@ function UploadDetail() {
   if (detail.isLoading) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Loading…</main>;
   if (!detail.data) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Upload not found.</main>;
 
-  const { upload, files, jobs } = detail.data;
+  const { upload, files, jobs, packages } = detail.data;
   const artwork = files.filter((f) => f.role === "artwork");
   const audio = files.filter((f) => f.role === "audio");
   const docs = files.filter((f) => f.role !== "audio" && f.role !== "artwork");
@@ -616,6 +616,26 @@ function UploadDetail() {
               Delete upload
             </Button>
           </div>
+        </section>
+      )}
+
+      {packages.length > 0 && (
+        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <h2 className="text-sm font-semibold">Packages sent to Apple</h2>
+          <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto text-sm">
+            {packages.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-3">
+                <span className="truncate">
+                  {p.vendor_id}.itmsp · {p.title}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {p.state}
+                  {p.apple_ticket ? ` · ticket ${p.apple_ticket}` : ""}
+                  {p.error_message ? ` · ${p.error_message}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
