@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS uq_delivery_packages_job_vendor ON public.delivery_packages(job_id, vendor_id);
