@@ -100,25 +100,42 @@ function UploadsPage() {
   const createFn = useServerFn(createUpload);
   const startFn = useServerFn(startFileUpload);
   const finishFn = useServerFn(finishFileUpload);
-  const submitFn = useServerFn(submitUpload);
+  const registerFn = useServerFn(registerExtracted);
+  const extractErrorFn = useServerFn(setExtractError);
 
   const [kind, setKind] = useState<(typeof kinds)[number]["id"]>("album");
-  const [title, setTitle] = useState("");
-  const [artist, setArtist] = useState("");
   const [sublabelId, setSublabelId] = useState<string>("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [zip, setZip] = useState<File | null>(null);
+  const [parsed, setParsed] = useState<Extracted | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
 
-  const totalBytes = files.reduce((a, f) => a + f.size, 0);
-
-  async function handleUpload() {
-    if (!title.trim()) {
-      toast.error("Give the release a title.");
+  async function handlePick(file: File | null) {
+    setZip(file);
+    setParsed(null);
+    setParseError(null);
+    setProgress({});
+    if (!file) return;
+    if (!/\.zip$/i.test(file.name)) {
+      setParseError("Please pick a .zip file.");
       return;
     }
-    if (files.length === 0) {
-      toast.error("Pick the audio files and the cover artwork.");
+    setBusy(true);
+    try {
+      const result = parseReleaseZip(file, await readZip(file), kind);
+      setParsed(result);
+      result.warnings.forEach((w) => toast.warning(w));
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "That zip could not be read.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpload() {
+    if (!zip || !parsed) {
+      toast.error("Pick a zip file first.");
       return;
     }
     if (isAdmin && !sublabelId) {
@@ -126,61 +143,72 @@ function UploadsPage() {
       return;
     }
 
-
     setBusy(true);
     setProgress({});
+    let uploadId: string | null = null;
     try {
       const { id } = await createFn({
-        data: {
-          kind,
-          title: title.trim(),
-          artistName: artist.trim() || undefined,
-          ...(isAdmin && sublabelId ? { sublabelId } : {}),
-        },
+        data: { kind, title: parsed.albumTitle, ...(isAdmin && sublabelId ? { sublabelId } : {}) },
       });
+      uploadId = id;
 
-      for (const file of files) {
+      const fileIds = new Map<string, string>();
+      for (const item of parsed.files) {
         const start = await startFn({
           data: {
             uploadId: id,
-            filename: file.name,
-            contentType: file.type || "application/octet-stream",
-            bytes: file.size,
+            filename: item.name,
+            contentType: item.blob.type || "application/octet-stream",
+            bytes: item.blob.size,
           },
         });
-        const { parts } = await pushFile(file, start, (fraction) =>
-          setProgress((p) => ({ ...p, [file.name]: fraction })),
+        const { parts } = await pushFile(item.blob, start, (fraction) =>
+          setProgress((p) => ({ ...p, [item.name]: fraction })),
         );
-        await finishFn({
+        const saved = await finishFn({
           data: {
             uploadId: id,
             key: start.key,
             filename: start.filename,
-            contentType: file.type || "application/octet-stream",
-            bytes: file.size,
-            role: start.role,
+            contentType: item.blob.type || "application/octet-stream",
+            bytes: item.blob.size,
+            role: item.role,
             multipartId: start.multipartId,
             parts,
           },
         });
-        setProgress((p) => ({ ...p, [file.name]: 1 }));
+        fileIds.set(item.path, saved.id);
+        setProgress((p) => ({ ...p, [item.name]: 1 }));
       }
 
-      const result = await submitFn({ data: { uploadId: id } });
-      if (!result.ok) toast.warning(result.message);
-      else toast.success("Upload sent for review.");
+      const result = await registerFn({
+        data: {
+          uploadId: id,
+          albumTitle: parsed.albumTitle,
+          warnings: parsed.warnings,
+          tracks: parsed.tracks.map((t) => ({
+            folderNumber: t.folder,
+            title: t.title,
+            audioFileId: fileIds.get(t.audioPath)!,
+            artworkFileId: t.artworkPath ? (fileIds.get(t.artworkPath) ?? null) : null,
+          })),
+        },
+      });
+      toast.success(result.message);
 
-      setTitle("");
-      setArtist("");
-      setFiles([]);
+      setZip(null);
+      setParsed(null);
       setProgress({});
       await qc.invalidateQueries({ queryKey: ["uploads"] });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Upload failed.");
+      const message = error instanceof Error ? error.message : "Upload failed.";
+      toast.error(message);
+      if (uploadId) await extractErrorFn({ data: { uploadId, message } }).catch(() => undefined);
     } finally {
       setBusy(false);
     }
   }
+
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
