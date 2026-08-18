@@ -12,6 +12,7 @@ import {
   queueDelivery,
   releaseIsrcsForUpload,
   retryDelivery,
+  previewMetadata,
   saveSheet,
   setUploadStatus,
 } from "@/lib/delivery.functions";
@@ -129,6 +130,12 @@ function UploadDetail() {
   const editFn = useServerFn(adminEditUpload);
   const deleteFileFn = useServerFn(deleteUploadFile);
   const logsFn = useServerFn(deliveryLogs);
+  const previewFn = useServerFn(previewMetadata);
+
+  const [preview, setPreview] = useState<
+    | null
+    | { total: number; packages: { vendorId: string; title: string; xml: string }[]; warnings: string[] }
+  >(null);
 
   const activeJob = detail.data?.jobs[0];
   const logs = useQuery({
@@ -158,6 +165,7 @@ function UploadDetail() {
   if (!detail.data) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Upload not found.</main>;
 
   const { upload, files, jobs, packages } = detail.data;
+  const locked = !["draft", "uploaded", "in_review", "rejected"].includes(String(upload.status));
   const artwork = files.filter((f) => f.role === "artwork");
   const audio = files.filter((f) => f.role === "audio");
   const docs = files.filter((f) => f.role !== "audio" && f.role !== "artwork");
@@ -219,7 +227,21 @@ function UploadDetail() {
               size="sm"
               disabled={busy || upload.status !== "ready"}
               title={upload.status !== "ready" ? "Approve the release first" : undefined}
-              onClick={() => run("Queued", () => queueFn({ data: { uploadId: id } }))}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const result = await previewFn({ data: { uploadId: id } });
+                  setPreview(result);
+                  setTimeout(
+                    () => document.getElementById("metadata-preview")?.scrollIntoView({ behavior: "smooth" }),
+                    50,
+                  );
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not build the metadata preview.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
             >
               Package &amp; deliver
             </Button>
@@ -230,6 +252,12 @@ function UploadDetail() {
       {isAdmin && upload.status !== "ready" && (
         <p className="mt-4 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
           This release is not approved yet. Review the files and the sheet, then press Approve to unlock delivery.
+        </p>
+      )}
+
+      {isAdmin && locked && (
+        <p className="mt-4 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
+          This release is approved and locked. Press <strong>In review</strong> to edit the details or the sheet again.
         </p>
       )}
 
@@ -329,7 +357,7 @@ function UploadDetail() {
       </div>
 
       {isAdmin && (
-        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+        <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
           <h2 className="text-sm font-semibold">Release details</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <div>
@@ -396,12 +424,12 @@ function UploadDetail() {
               </Button>
             </div>
           </div>
-        </section>
+        </fieldset>
       )}
 
 
       {isAdmin && (
-        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+        <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h2 className="text-sm font-semibold">Metadata sheet</h2>
             <div className="flex flex-wrap gap-2">
@@ -615,6 +643,61 @@ function UploadDetail() {
             >
               Delete upload
             </Button>
+          </div>
+        </fieldset>
+      )}
+
+      {preview && (
+        <section id="metadata-preview" className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Metadata review</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {preview.total} package{preview.total === 1 ? "" : "s"} will be delivered
+                {preview.total > preview.packages.length ? ` — showing the first ${preview.packages.length}` : ""}.
+                Checksums are computed at packaging time.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>
+                Close
+              </Button>
+              <Button
+                size="sm"
+                disabled={busy || preview.warnings.length > 0}
+                title={preview.warnings.length > 0 ? "Fix the warnings first" : undefined}
+                onClick={() =>
+                  run("Queued for packaging and delivery", async () => {
+                    const result = await queueFn({ data: { uploadId: id } });
+                    if (result.ok !== false) setPreview(null);
+                    return result;
+                  })
+                }
+              >
+                Deliver to Apple
+              </Button>
+            </div>
+          </div>
+
+          {preview.warnings.length > 0 && (
+            <ul className="mt-4 list-disc space-y-1 rounded-xl border border-destructive/40 bg-destructive/5 p-4 pl-8 text-sm text-destructive">
+              {preview.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+
+          <div className="mt-4 space-y-4">
+            {preview.packages.map((pkg) => (
+              <div key={pkg.vendorId}>
+                <p className="text-xs font-medium">
+                  {pkg.vendorId}.itmsp / metadata.xml · {pkg.title}
+                </p>
+                <pre className="mt-1 max-h-96 overflow-auto rounded-xl bg-secondary p-4 text-xs leading-relaxed">
+                  {pkg.xml}
+                </pre>
+              </div>
+            ))}
           </div>
         </section>
       )}

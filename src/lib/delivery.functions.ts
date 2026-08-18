@@ -44,7 +44,7 @@ export const isrcPoolStats = createServerFn({ method: "GET" })
       context.supabase
         .from("isrc_pool")
         .select("id", { count: "exact", head: true })
-        .not("used_by_track_id", "is", null),
+        .or("used_by_track_id.not.is.null,assigned_at.not.is.null"),
       context.supabase
         .from("isrc_pool")
         .select("code, used_by_track_id, assigned_at")
@@ -66,6 +66,8 @@ export const assignIsrcsToUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
 
     const { data: tracks, error } = await context.supabase
       .from("upload_tracks")
@@ -80,6 +82,7 @@ export const assignIsrcsToUpload = createServerFn({ method: "POST" })
       .from("isrc_pool")
       .select("id, code")
       .is("used_by_track_id", null)
+      .is("assigned_at", null)
       .order("code")
       .limit(needy.length);
     if (freeError) throw new Error(freeError.message);
@@ -118,10 +121,25 @@ export const releaseIsrcsForUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
     const { data: tracks } = await context.supabase
       .from("upload_tracks")
       .select("id")
       .eq("upload_id", data.uploadId);
+    const { data: uploadRow } = await context.supabase
+      .from("uploads")
+      .select("upc")
+      .eq("id", data.uploadId)
+      .maybeSingle();
+    if (uploadRow?.upc) {
+      await context.supabase
+        .from("isrc_pool")
+        .update({ assigned_at: null })
+        .eq("code", uploadRow.upc)
+        .is("used_by_track_id", null);
+      await context.supabase.from("uploads").update({ upc: null }).eq("id", data.uploadId);
+    }
     const ids = (tracks ?? []).map((t) => t.id);
     if (ids.length) {
       await context.supabase
@@ -165,6 +183,8 @@ export const saveSheet = createServerFn({ method: "POST" })
     const { assertAdmin } = await import("./guards.server");
     const { normalizeIsrc, isrcValid } = await import("./uploads.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
 
     const seen = new Set<string>();
     for (const t of data.tracks) {
@@ -213,6 +233,8 @@ export const applyArtistToAll = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
     await context.supabase.from("uploads").update({ artist_name: data.artistName }).eq("id", data.uploadId);
     const { error } = await context.supabase
       .from("upload_tracks")
@@ -367,6 +389,8 @@ export const adminEditUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
     const { error } = await context.supabase
       .from("uploads")
       .update({
@@ -397,6 +421,8 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
 
     const { data: upload, error: upErr } = await context.supabase
       .from("uploads")
@@ -422,6 +448,7 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
       .from("isrc_pool")
       .select("id, code")
       .is("used_by_track_id", null)
+      .is("assigned_at", null)
       .order("code")
       .limit(wanted + 200);
     if (freeError) throw new Error(freeError.message);
@@ -472,3 +499,78 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
     return { ok: true as const, message: `Filled ${assigned} code${assigned === 1 ? "" : "s"}.` };
   });
 
+
+/** Builds the metadata.xml documents the worker will deliver, for admin review. */
+export const previewMetadata = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ uploadId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    const { buildMetadataPreview } = await import("./metadata-xml");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: upload, error: upErr } = await context.supabase
+      .from("uploads")
+      .select(
+        "id, kind, title, artist_name, upc, release_date, genre_code, language, label_name, copyright_pline, copyright_cline, sublabels(name)",
+      )
+      .eq("id", data.uploadId)
+      .maybeSingle();
+    if (upErr) throw new Error(upErr.message);
+    if (!upload) throw new Error("Upload not found");
+
+    const [{ data: tracks }, { data: files }] = await Promise.all([
+      context.supabase
+        .from("upload_tracks")
+        .select("id, title, isrc, artist_name, file_id, artwork_file_id, track_number")
+        .eq("upload_id", data.uploadId)
+        .order("track_number"),
+      context.supabase
+        .from("upload_files")
+        .select("id, filename, bytes, role")
+        .eq("upload_id", data.uploadId),
+    ]);
+
+    const byId = new Map((files ?? []).map((f) => [f.id, f]));
+    const fallbackArtwork = (files ?? []).find((f) => f.role === "artwork") ?? null;
+    const provider = process.env["APPLE_PROVIDER_SHORTNAME"] || "provider";
+
+    const previewTracks = (tracks ?? []).map((t) => {
+      const audio = t.file_id ? byId.get(t.file_id) : null;
+      const art = t.artwork_file_id ? byId.get(t.artwork_file_id) : fallbackArtwork;
+      return {
+        title: t.title ?? "",
+        isrc: t.isrc ?? "",
+        artist_name: t.artist_name ?? upload.artist_name ?? "",
+        audio: audio ? { file_name: audio.filename, size: Number(audio.bytes ?? 0) } : null,
+        artwork: art ? { file_name: art.filename, size: Number(art.bytes ?? 0) } : null,
+      };
+    });
+
+    const packages = buildMetadataPreview(
+      {
+        kind: upload.kind,
+        title: upload.title,
+        vendor_id: upload.upc ?? previewTracks[0]?.isrc ?? "",
+        artist_name: upload.artist_name ?? "",
+        genre_code: upload.genre_code || (upload.kind === "ringtones" ? "RINGTONES-00" : "POP-00"),
+        language: upload.language || "en",
+        label_name: upload.label_name || (upload.sublabels as { name: string } | null)?.name || provider,
+        copyright_pline: upload.copyright_pline ?? "",
+        copyright_cline: upload.copyright_cline ?? "",
+        release_date: upload.release_date ?? null,
+        provider,
+      },
+      previewTracks,
+    );
+
+    const warnings: string[] = [];
+    if (!upload.artist_name) warnings.push("Artist name is empty.");
+    previewTracks.forEach((t, i) => {
+      if (!t.isrc) warnings.push(`Track ${i + 1} ("${t.title}") has no ISRC.`);
+      if (!t.audio) warnings.push(`Track ${i + 1} ("${t.title}") has no audio file.`);
+    });
+    if (upload.kind !== "ringtones" && !upload.upc) warnings.push("Album ISRC (vendor id) is empty.");
+
+    return { total: packages.length, packages: packages.slice(0, 5), warnings: warnings.slice(0, 20) };
+  });
