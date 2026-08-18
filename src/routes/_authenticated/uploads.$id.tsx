@@ -7,7 +7,7 @@ import { getUpload, deleteUpload, deleteUploadFile } from "@/lib/uploads.functio
 import {
   adminEditUpload,
   applyArtistToAll,
-  assignIsrcsToUpload,
+  assignCodesToUpload,
   deliveryLogs,
   queueDelivery,
   releaseIsrcsForUpload,
@@ -15,6 +15,7 @@ import {
   saveSheet,
   setUploadStatus,
 } from "@/lib/delivery.functions";
+
 import { getViewer } from "@/lib/analytics.functions";
 import { formatBytes } from "@/lib/upload-client";
 import { Button } from "@/components/ui/button";
