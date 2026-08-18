@@ -207,6 +207,8 @@ export async function buildPackages(workDir, release, tracks, audioNames, artwor
         dir: await makePackage(workDir, track.isrc, assets, xml),
         vendorId: track.isrc,
         title: track.title,
+        xml,
+        assets,
       });
     }
     return out;
@@ -220,6 +222,8 @@ export async function buildPackages(workDir, release, tracks, audioNames, artwor
       dir: await makePackage(workDir, release.vendor_id, assets, xml),
       vendorId: release.vendor_id,
       title: release.title,
+      xml,
+      assets,
     },
   ];
 }
