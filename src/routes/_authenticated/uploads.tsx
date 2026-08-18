@@ -50,9 +50,9 @@ export const Route = createFileRoute("/_authenticated/uploads")({
 
 const kinds = [
   { id: "album", label: "Album" },
-  { id: "singles", label: "Singles" },
   { id: "ringtones", label: "Ringtones" },
 ] as const;
+
 
 const statuses = [
   "all",
