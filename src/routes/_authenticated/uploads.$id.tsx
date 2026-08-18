@@ -67,6 +67,8 @@ function UploadDetail() {
   const getFn = useServerFn(getUpload);
   const detail = useQuery({ queryKey: ["upload", id], queryFn: () => getFn({ data: { id } }) });
 
+  const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<"album" | "singles" | "ringtones">("album");
   const [artist, setArtist] = useState("");
   const [upc, setUpc] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
