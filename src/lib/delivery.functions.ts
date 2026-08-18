@@ -418,23 +418,31 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
     const wanted = needy.length + (needsAlbumCode ? 1 : 0);
     if (wanted === 0) return { ok: true as const, message: "Every code is already filled in." };
 
-    const { data: free, error: freeError } = await context.supabase
+    const { data: pool, error: freeError } = await context.supabase
       .from("isrc_pool")
       .select("id, code")
       .is("used_by_track_id", null)
       .order("code")
-      .limit(wanted);
+      .limit(wanted + 200);
     if (freeError) throw new Error(freeError.message);
-    if ((free ?? []).length < wanted)
+    // Album-level codes live on uploads.upc, so they are not linked to a track — exclude them.
+    const { data: takenAlbums, error: takenErr } = await context.supabase
+      .from("uploads")
+      .select("upc")
+      .not("upc", "is", null);
+    if (takenErr) throw new Error(takenErr.message);
+    const taken = new Set((takenAlbums ?? []).map((u) => (u.upc ?? "").toUpperCase()));
+    const free = (pool ?? []).filter((c) => !taken.has(c.code.toUpperCase())).slice(0, wanted);
+    if (free.length < wanted)
       return {
         ok: false as const,
-        message: `Only ${free?.length ?? 0} free code${free?.length === 1 ? "" : "s"} left in the pool but ${wanted} are needed. Import more codes first.`,
+        message: `Only ${free.length} free code${free.length === 1 ? "" : "s"} left in the pool but ${wanted} are needed. Import more codes first.`,
       };
 
     let cursor = 0;
     let assigned = 0;
     if (needsAlbumCode) {
-      const albumCode = free![cursor++]!;
+      const albumCode = free[cursor++]!;
       const { error: albumErr } = await context.supabase
         .from("uploads")
         .update({ upc: albumCode.code })
@@ -448,7 +456,7 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
     }
 
     for (const track of needy) {
-      const code = free![cursor++]!;
+      const code = free[cursor++]!;
       const claim = await context.supabase
         .from("isrc_pool")
         .update({ used_by_track_id: track.id, assigned_at: new Date().toISOString() })

@@ -423,7 +423,7 @@ function UploadDetail() {
                 disabled={busy}
                 onClick={() => run("Codes assigned", () => assignFn({ data: { uploadId: id } }))}
               >
-                Fill ISRC &amp; UPC
+                Fill ISRCs
               </Button>
               <Button
                 variant="outline"
@@ -468,7 +468,7 @@ function UploadDetail() {
               <Input className="mt-1" value={artist} onChange={(e) => setArtist(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">UPC</Label>
+              <Label className="text-xs">Album ISRC (vendor id)</Label>
               <Input className="mt-1" value={upc} onChange={(e) => setUpc(e.target.value)} />
             </div>
             <div>
