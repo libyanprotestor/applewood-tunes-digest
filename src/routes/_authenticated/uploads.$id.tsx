@@ -51,6 +51,7 @@ export const Route = createFileRoute("/_authenticated/uploads/$id")({
 
 type TrackRow = {
   id: string;
+  folderNumber: number | null;
   trackNumber: number;
   title: string;
   version: string;
@@ -58,6 +59,13 @@ type TrackRow = {
   isrc: string;
   explicit: boolean;
 };
+
+function toCsv(rows: string[][]) {
+  return rows
+    .map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(","))
+    .join("\n");
+}
+
 
 function UploadDetail() {
   const { id } = Route.useParams();
