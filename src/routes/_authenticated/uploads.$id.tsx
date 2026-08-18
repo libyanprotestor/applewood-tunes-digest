@@ -226,15 +226,30 @@ function UploadDetail() {
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-3">
               {artwork.map((f) => (
-                <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
-                  <img
-                    src={f.url}
-                    alt={f.filename}
-                    loading="lazy"
-                    className="aspect-square w-full rounded-lg border border-border object-cover"
-                  />
-                  <span className="mt-1 block truncate text-xs text-muted-foreground">{f.filename}</span>
-                </a>
+                <div key={f.id}>
+                  <a href={f.url} target="_blank" rel="noreferrer">
+                    <img
+                      src={f.url}
+                      alt={f.filename}
+                      loading="lazy"
+                      className="aspect-square w-full rounded-lg border border-border object-cover"
+                    />
+                    <span className="mt-1 block truncate text-xs text-muted-foreground">{f.filename}</span>
+                  </a>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="mt-1 text-xs text-destructive hover:underline"
+                      onClick={() => {
+                        if (!window.confirm(`Delete ${f.filename}?`)) return;
+                        void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
