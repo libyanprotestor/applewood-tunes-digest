@@ -164,9 +164,33 @@ async function isApproved(jobId) {
   return Boolean(data?.approved_for_delivery);
 }
 
-async function processJob(jobId, uploadId) {
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "delivery-"));
+const WORK_ROOT = process.env.WORK_ROOT || path.join(os.tmpdir(), "delivery-work");
+
+/** Packages already built for this job are kept on disk while we wait for approval. */
+async function loadBuiltPackages(workDir) {
   try {
+    const saved = JSON.parse(await fs.readFile(path.join(workDir, "packages.json"), "utf8"));
+    for (const pkg of saved) await fs.access(pkg.dir);
+    return saved.length ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+async function processJob(jobId, uploadId) {
+  const workDir = path.join(WORK_ROOT, `job-${jobId}`);
+  await fs.mkdir(workDir, { recursive: true });
+  let paused = false;
+  try {
+    // Resuming after approval: the packages are still on disk, so skip the
+    // download + packaging pass entirely and go straight to the upload.
+    const prebuilt = await loadBuiltPackages(workDir);
+    if (prebuilt && (await isApproved(jobId))) {
+      await log(jobId, "Approved — uploading the packages built earlier.");
+      await uploadPackages(jobId, uploadId, prebuilt);
+      return;
+    }
+
     await log(jobId, "Claimed job, loading release metadata.");
     const { data: upload, error: uploadError } = await supabase
       .from("uploads")
