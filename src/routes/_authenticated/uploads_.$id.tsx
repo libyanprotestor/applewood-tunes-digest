@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export const Route = createFileRoute("/_authenticated/uploads/$id")({
+export const Route = createFileRoute("/_authenticated/uploads_/$id")({
   head: () => ({
     meta: [
       { title: "Review release | Apple Music Delivery Console" },
