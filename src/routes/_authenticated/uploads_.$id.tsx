@@ -357,7 +357,7 @@ function UploadDetail() {
       </div>
 
       {isAdmin && (
-        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+        <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
           <h2 className="text-sm font-semibold">Release details</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <div>
@@ -424,12 +424,12 @@ function UploadDetail() {
               </Button>
             </div>
           </div>
-        </section>
+        </fieldset>
       )}
 
 
       {isAdmin && (
-        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+        <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h2 className="text-sm font-semibold">Metadata sheet</h2>
             <div className="flex flex-wrap gap-2">
@@ -643,6 +643,61 @@ function UploadDetail() {
             >
               Delete upload
             </Button>
+          </div>
+        </fieldset>
+      )}
+
+      {preview && (
+        <section id="metadata-preview" className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Metadata review</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {preview.total} package{preview.total === 1 ? "" : "s"} will be delivered
+                {preview.total > preview.packages.length ? ` — showing the first ${preview.packages.length}` : ""}.
+                Checksums are computed at packaging time.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>
+                Close
+              </Button>
+              <Button
+                size="sm"
+                disabled={busy || preview.warnings.length > 0}
+                title={preview.warnings.length > 0 ? "Fix the warnings first" : undefined}
+                onClick={() =>
+                  run("Queued for packaging and delivery", async () => {
+                    const result = await queueFn({ data: { uploadId: id } });
+                    if (result.ok !== false) setPreview(null);
+                    return result;
+                  })
+                }
+              >
+                Deliver to Apple
+              </Button>
+            </div>
+          </div>
+
+          {preview.warnings.length > 0 && (
+            <ul className="mt-4 list-disc space-y-1 rounded-xl border border-destructive/40 bg-destructive/5 p-4 pl-8 text-sm text-destructive">
+              {preview.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+
+          <div className="mt-4 space-y-4">
+            {preview.packages.map((pkg) => (
+              <div key={pkg.vendorId}>
+                <p className="text-xs font-medium">
+                  {pkg.vendorId}.itmsp / metadata.xml · {pkg.title}
+                </p>
+                <pre className="mt-1 max-h-96 overflow-auto rounded-xl bg-secondary p-4 text-xs leading-relaxed">
+                  {pkg.xml}
+                </pre>
+              </div>
+            ))}
           </div>
         </section>
       )}
