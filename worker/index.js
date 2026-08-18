@@ -56,7 +56,56 @@ const BUCKET = env("B2_BUCKET");
 
 const WORKER_ID = process.env.WORKER_ID || `worker-${os.hostname()}`;
 const POLL_MS = Number(process.env.POLL_INTERVAL_MS || 15000);
-const TRANSPORTER = process.env.TRANSPORTER_PATH || "iTMSTransporter";
+// Resolve the Transporter binary once at startup: the explicit path if it
+// exists, otherwise anything on PATH, otherwise search the install dir.
+let TRANSPORTER = process.env.TRANSPORTER_PATH || "iTMSTransporter";
+async function resolveTransporter() {
+  const candidates = [
+    process.env.TRANSPORTER_PATH,
+    "/usr/local/bin/iTMSTransporter",
+    "/opt/transporter/itms/bin/iTMSTransporter",
+    "/opt/transporter/bin/iTMSTransporter",
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      TRANSPORTER = candidate;
+      console.log(`Using Transporter at ${TRANSPORTER}`);
+      return;
+    } catch {
+      /* keep looking */
+    }
+  }
+  // Last resort: search the install tree.
+  const search = async (dir, depth = 0) => {
+    if (depth > 6) return null;
+    let entries = [];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const found = await search(full, depth + 1);
+        if (found) return found;
+      } else if (entry.name === "iTMSTransporter") {
+        return full;
+      }
+    }
+    return null;
+  };
+  const found = (await search("/opt/transporter")) || (await search("/usr/local/itms"));
+  if (found) {
+    TRANSPORTER = found;
+    console.log(`Using Transporter at ${TRANSPORTER}`);
+  } else {
+    console.warn(
+      "iTMSTransporter was not found — set TRANSPORTER_PATH in .env or rebuild the image with the Apple installer.",
+    );
+  }
+}
 const PROVIDER = env("APPLE_PROVIDER_SHORTNAME");
 const APPLE_USER = env("APPLE_TRANSPORTER_USER");
 const APPLE_PASSWORD = env("APPLE_TRANSPORTER_PASSWORD");
@@ -293,6 +342,7 @@ async function tick() {
 }
 
 async function main() {
+  await resolveTransporter();
   await signIn();
   console.log(`${WORKER_ID} polling every ${POLL_MS}ms`);
   for (;;) {
