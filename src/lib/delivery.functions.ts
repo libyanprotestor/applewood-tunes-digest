@@ -260,6 +260,11 @@ export const queueDelivery = createServerFn({ method: "POST" })
       .maybeSingle();
     if (uploadError) throw new Error(uploadError.message);
     if (!upload) throw new Error("Upload not found");
+    if (upload.status !== "ready")
+      return {
+        ok: false as const,
+        message: "Approve this release first — mark it Ready, then deliver.",
+      };
 
     const { data: tracks } = await context.supabase
       .from("upload_tracks")
