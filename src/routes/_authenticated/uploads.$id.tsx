@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { getUpload, deleteUpload } from "@/lib/uploads.functions";
+import { getUpload, deleteUpload, deleteUploadFile } from "@/lib/uploads.functions";
 import {
+  adminEditUpload,
   applyArtistToAll,
   assignIsrcsToUpload,
   deliveryLogs,
@@ -19,6 +20,13 @@ import { formatBytes } from "@/lib/upload-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/uploads/$id")({
   head: () => ({
