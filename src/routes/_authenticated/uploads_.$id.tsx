@@ -727,6 +727,7 @@ function UploadDetail() {
         {jobs.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">No delivery has been started yet.</p>
         ) : (
+
           <ul className="mt-3 space-y-2">
             {jobs.map((j) => (
               <li key={j.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
@@ -749,6 +750,14 @@ function UploadDetail() {
             ))}
           </ul>
         )}
+        {jobs.some((j) => j.state === "queued") && (
+
+          <p className="mt-3 rounded-xl border border-border bg-secondary/60 p-3 text-xs text-muted-foreground">
+            Queued and waiting for the delivery worker to pick it up. Packaging and the Apple upload happen on your
+            Transporter machine — if no worker is running, the job stays queued.
+          </p>
+        )}
+
         {(logs.data ?? []).length > 0 && (
           <pre className="mt-4 max-h-72 overflow-auto rounded-xl bg-secondary p-4 text-xs leading-relaxed">
             {(logs.data ?? []).map((l) => `${l.created_at.slice(11, 19)}  ${l.line}`).join("\n")}
