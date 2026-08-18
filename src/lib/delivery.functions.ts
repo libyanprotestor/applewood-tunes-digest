@@ -44,7 +44,7 @@ export const isrcPoolStats = createServerFn({ method: "GET" })
       context.supabase
         .from("isrc_pool")
         .select("id", { count: "exact", head: true })
-        .not("used_by_track_id", "is", null),
+        .or("used_by_track_id.not.is.null,assigned_at.not.is.null"),
       context.supabase
         .from("isrc_pool")
         .select("code, used_by_track_id, assigned_at")
@@ -80,6 +80,7 @@ export const assignIsrcsToUpload = createServerFn({ method: "POST" })
       .from("isrc_pool")
       .select("id, code")
       .is("used_by_track_id", null)
+      .is("assigned_at", null)
       .order("code")
       .limit(needy.length);
     if (freeError) throw new Error(freeError.message);
@@ -122,6 +123,19 @@ export const releaseIsrcsForUpload = createServerFn({ method: "POST" })
       .from("upload_tracks")
       .select("id")
       .eq("upload_id", data.uploadId);
+    const { data: uploadRow } = await context.supabase
+      .from("uploads")
+      .select("upc")
+      .eq("id", data.uploadId)
+      .maybeSingle();
+    if (uploadRow?.upc) {
+      await context.supabase
+        .from("isrc_pool")
+        .update({ assigned_at: null })
+        .eq("code", uploadRow.upc)
+        .is("used_by_track_id", null);
+      await context.supabase.from("uploads").update({ upc: null }).eq("id", data.uploadId);
+    }
     const ids = (tracks ?? []).map((t) => t.id);
     if (ids.length) {
       await context.supabase
@@ -422,6 +436,7 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
       .from("isrc_pool")
       .select("id, code")
       .is("used_by_track_id", null)
+      .is("assigned_at", null)
       .order("code")
       .limit(wanted + 200);
     if (freeError) throw new Error(freeError.message);
