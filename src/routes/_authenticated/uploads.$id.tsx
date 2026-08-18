@@ -233,6 +233,12 @@ function UploadDetail() {
         </p>
       )}
 
+      {upload.extract_error && (
+        <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+          Zip problem: {upload.extract_error}
+        </p>
+      )}
+
       {upload.rejection_reason && (
         <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
           Rejected: {upload.rejection_reason}
@@ -343,6 +349,26 @@ function UploadDetail() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label className="text-xs">Genre code</Label>
+              <Input className="mt-1" value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="RINGTONES-00" />
+            </div>
+            <div>
+              <Label className="text-xs">Language</Label>
+              <Input className="mt-1" value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="en" />
+            </div>
+            <div>
+              <Label className="text-xs">Label name</Label>
+              <Input className="mt-1" value={labelName} onChange={(e) => setLabelName(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">℗ line</Label>
+              <Input className="mt-1" value={pline} onChange={(e) => setPline(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">© line</Label>
+              <Input className="mt-1" value={cline} onChange={(e) => setCline(e.target.value)} />
+            </div>
             <div className="flex items-end">
               <Button
                 disabled={busy || !title.trim()}
@@ -356,6 +382,11 @@ function UploadDetail() {
                         artistName: artist || undefined,
                         upc: upc || undefined,
                         releaseDate: releaseDate || undefined,
+                        genreCode: genre || undefined,
+                        language: language || undefined,
+                        labelName: labelName || undefined,
+                        copyrightPline: pline || undefined,
+                        copyrightCline: cline || undefined,
                       },
                     }),
                   )
@@ -390,9 +421,35 @@ function UploadDetail() {
                 variant="outline"
                 size="sm"
                 disabled={busy}
-                onClick={() => run("ISRCs assigned", () => assignFn({ data: { uploadId: id } }))}
+                onClick={() => run("Codes assigned", () => assignFn({ data: { uploadId: id } }))}
               >
-                Assign ISRCs
+                Fill ISRC &amp; UPC
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const csv = toCsv([
+                    ["Folder", "Track", "Title", "Version", "Artist", "ISRC", "Explicit"],
+                    ...tracks.map((t) => [
+                      t.folderNumber ? String(t.folderNumber) : "",
+                      String(t.trackNumber),
+                      t.title,
+                      t.version,
+                      t.artistName || artist,
+                      t.isrc,
+                      t.explicit ? "yes" : "no",
+                    ]),
+                  ]);
+                  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `${title || "release"}-sheet.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                Download sheet
               </Button>
               <Button
                 variant="ghost"
