@@ -85,7 +85,8 @@ function UploadDetail() {
   const [genre, setGenre] = useState("");
   const [language, setLanguage] = useState("");
   const [labelName, setLabelName] = useState("");
-  const [copyrightLine, setCopyrightLine] = useState("");
+  const [pline, setPline] = useState("");
+  const [cline, setCline] = useState("");
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -100,7 +101,8 @@ function UploadDetail() {
     setGenre(detail.data.upload.genre_code ?? "");
     setLanguage(detail.data.upload.language ?? "");
     setLabelName(detail.data.upload.label_name ?? "");
-    setCopyrightLine(detail.data.upload.copyright_line ?? "");
+    setPline(detail.data.upload.copyright_pline ?? "");
+    setCline(detail.data.upload.copyright_cline ?? "");
     setTracks(
       detail.data.tracks.map((t) => ({
         id: t.id,
