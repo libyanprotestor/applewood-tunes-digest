@@ -105,6 +105,8 @@ function UploadDetail() {
   const statusFn = useServerFn(setUploadStatus);
   const retryFn = useServerFn(retryDelivery);
   const deleteFn = useServerFn(deleteUpload);
+  const editFn = useServerFn(adminEditUpload);
+  const deleteFileFn = useServerFn(deleteUploadFile);
   const logsFn = useServerFn(deliveryLogs);
 
   const activeJob = detail.data?.jobs[0];
