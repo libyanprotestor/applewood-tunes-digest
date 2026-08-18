@@ -319,7 +319,35 @@ export const queueDelivery = createServerFn({ method: "POST" })
     return { ok: true as const, message: "Queued for packaging and delivery." };
   });
 
+/** Clears a job that no worker has picked up, so the release can be re-queued. */
+export const cancelDelivery = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ jobId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: job, error: jobError } = await context.supabase
+      .from("delivery_jobs")
+      .select("id, upload_id, state, worker_id")
+      .eq("id", data.jobId)
+      .maybeSingle();
+    if (jobError) throw new Error(jobError.message);
+    if (!job) throw new Error("Job not found");
+    if (job.state !== "queued")
+      return { ok: false as const, message: "A worker is already processing this job." };
+
+    const { error } = await context.supabase
+      .from("delivery_jobs")
+      .update({ state: "failed", error_message: "Cancelled by admin", finished_at: new Date().toISOString() })
+      .eq("id", data.jobId);
+    if (error) throw new Error(error.message);
+    await context.supabase.from("uploads").update({ status: "ready" }).eq("id", job.upload_id);
+    return { ok: true as const, message: "Delivery cancelled." };
+  });
+
 export const retryDelivery = createServerFn({ method: "POST" })
+
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ jobId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
