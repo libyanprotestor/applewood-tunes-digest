@@ -11,6 +11,8 @@ import {
   deliveryLogs,
   queueDelivery,
   cancelDelivery,
+  approvePackages,
+  rejectPackages,
 
   releaseIsrcsForUpload,
   retryDelivery,
@@ -77,7 +79,14 @@ function UploadDetail() {
   const isAdmin = viewer.data?.isAdmin ?? false;
 
   const getFn = useServerFn(getUpload);
-  const detail = useQuery({ queryKey: ["upload", id], queryFn: () => getFn({ data: { id } }) });
+  const detail = useQuery({
+    queryKey: ["upload", id],
+    queryFn: () => getFn({ data: { id } }),
+    refetchInterval: (q) => {
+      const state = q.state.data?.jobs?.[0]?.state;
+      return state && ["queued", "claimed", "packaging", "uploading"].includes(String(state)) ? 5000 : false;
+    },
+  });
 
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<"album" | "singles" | "ringtones">("album");
@@ -129,6 +138,8 @@ function UploadDetail() {
   const statusFn = useServerFn(setUploadStatus);
   const retryFn = useServerFn(retryDelivery);
   const cancelFn = useServerFn(cancelDelivery);
+  const approveFn = useServerFn(approvePackages);
+  const rejectFn = useServerFn(rejectPackages);
 
   const deleteFn = useServerFn(deleteUpload);
   const editFn = useServerFn(adminEditUpload);
@@ -170,6 +181,7 @@ function UploadDetail() {
 
   const { upload, files, jobs, packages } = detail.data;
   const locked = !["draft", "uploaded", "in_review", "rejected"].includes(String(upload.status));
+  const builtPackages = packages.filter((p) => p.job_id === activeJob?.id);
   const artwork = files.filter((f) => f.role === "artwork");
   const audio = files.filter((f) => f.role === "audio");
   const docs = files.filter((f) => f.role !== "audio" && f.role !== "artwork");
@@ -702,6 +714,66 @@ function UploadDetail() {
                 </pre>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {isAdmin && activeJob?.state === "awaiting_approval" && (
+        <section className="mt-8 rounded-2xl border border-primary/40 bg-card p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Built packages — review before delivery</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The worker built {builtPackages.length} package{builtPackages.length === 1 ? "" : "s"} and is waiting.
+                Nothing has been sent to Apple yet.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  const reason = window.prompt("Reject these packages? Optional reason:") ?? undefined;
+                  void run("Rejected", () => rejectFn({ data: { jobId: activeJob.id, reason } }));
+                }}
+              >
+                Reject packages
+              </Button>
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={() => run("Approved", () => approveFn({ data: { jobId: activeJob.id } }))}
+              >
+                Approve & send to Apple
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-4">
+            {builtPackages.map((p) => {
+              const manifest = (p.manifest ?? null) as { files?: string[]; folder?: string } | null;
+              return (
+                <div key={p.id}>
+                  <p className="text-xs font-medium">
+                    {manifest?.folder ?? `${p.vendor_id}.itmsp`} · {p.title}
+                  </p>
+                  {manifest?.files?.length ? (
+                    <ul className="mt-1 list-disc pl-6 text-xs text-muted-foreground">
+                      {manifest.files.map((f) => (
+                        <li key={f}>{f}</li>
+                      ))}
+                      <li>metadata.xml</li>
+                    </ul>
+                  ) : null}
+                  {p.metadata_xml && (
+                    <pre className="mt-2 max-h-96 overflow-auto rounded-xl bg-secondary p-4 text-xs leading-relaxed">
+                      {p.metadata_xml}
+                    </pre>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

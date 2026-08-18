@@ -38,6 +38,7 @@ export type Database = {
       delivery_jobs: {
         Row: {
           apple_ticket: string | null
+          approved_for_delivery: boolean
           attempts: number
           claimed_at: string | null
           created_at: string
@@ -52,6 +53,7 @@ export type Database = {
         }
         Insert: {
           apple_ticket?: string | null
+          approved_for_delivery?: boolean
           attempts?: number
           claimed_at?: string | null
           created_at?: string
@@ -66,6 +68,7 @@ export type Database = {
         }
         Update: {
           apple_ticket?: string | null
+          approved_for_delivery?: boolean
           attempts?: number
           claimed_at?: string | null
           created_at?: string
@@ -127,6 +130,8 @@ export type Database = {
           error_message: string | null
           id: string
           job_id: string
+          manifest: Json | null
+          metadata_xml: string | null
           state: Database["public"]["Enums"]["delivery_state"]
           title: string | null
           updated_at: string
@@ -139,6 +144,8 @@ export type Database = {
           error_message?: string | null
           id?: string
           job_id: string
+          manifest?: Json | null
+          metadata_xml?: string | null
           state?: Database["public"]["Enums"]["delivery_state"]
           title?: string | null
           updated_at?: string
@@ -151,6 +158,8 @@ export type Database = {
           error_message?: string | null
           id?: string
           job_id?: string
+          manifest?: Json | null
+          metadata_xml?: string | null
           state?: Database["public"]["Enums"]["delivery_state"]
           title?: string | null
           updated_at?: string
@@ -951,6 +960,7 @@ export type Database = {
         | "uploading"
         | "succeeded"
         | "failed"
+        | "awaiting_approval"
       item_type: "ringtone" | "single" | "album" | "other"
       run_status: "pending" | "success" | "not_ready" | "failed"
       upload_file_role: "audio" | "artwork" | "document" | "other"
@@ -965,6 +975,7 @@ export type Database = {
         | "delivered"
         | "rejected"
         | "cancelled"
+        | "awaiting_approval"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1100,6 +1111,7 @@ export const Constants = {
         "uploading",
         "succeeded",
         "failed",
+        "awaiting_approval",
       ],
       item_type: ["ringtone", "single", "album", "other"],
       run_status: ["pending", "success", "not_ready", "failed"],
@@ -1115,6 +1127,7 @@ export const Constants = {
         "delivered",
         "rejected",
         "cancelled",
+        "awaiting_approval",
       ],
     },
   },
