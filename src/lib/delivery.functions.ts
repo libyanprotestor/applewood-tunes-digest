@@ -436,13 +436,13 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
     if (free.length < wanted)
       return {
         ok: false as const,
-        message: `Only ${free?.length ?? 0} free code${free?.length === 1 ? "" : "s"} left in the pool but ${wanted} are needed. Import more codes first.`,
+        message: `Only ${free.length} free code${free.length === 1 ? "" : "s"} left in the pool but ${wanted} are needed. Import more codes first.`,
       };
 
     let cursor = 0;
     let assigned = 0;
     if (needsAlbumCode) {
-      const albumCode = free![cursor++]!;
+      const albumCode = free[cursor++]!;
       const { error: albumErr } = await context.supabase
         .from("uploads")
         .update({ upc: albumCode.code })
@@ -456,7 +456,7 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
     }
 
     for (const track of needy) {
-      const code = free![cursor++]!;
+      const code = free[cursor++]!;
       const claim = await context.supabase
         .from("isrc_pool")
         .update({ used_by_track_id: track.id, assigned_at: new Date().toISOString() })
