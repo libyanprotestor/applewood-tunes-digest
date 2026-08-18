@@ -307,7 +307,7 @@ export const queueDelivery = createServerFn({ method: "POST" })
       .from("delivery_jobs")
       .select("id")
       .eq("upload_id", data.uploadId)
-      .in("state", ["queued", "claimed", "packaging", "uploading"])
+      .in("state", ["queued", "claimed", "packaging", "uploading", "awaiting_approval"])
       .limit(1);
     if (active?.length) return { ok: false as const, message: "A delivery is already running for this upload." };
 
@@ -317,6 +317,66 @@ export const queueDelivery = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     await context.supabase.from("uploads").update({ status: "packaging" }).eq("id", data.uploadId);
     return { ok: true as const, message: "Queued for packaging and delivery." };
+  });
+
+/** Admin reviewed the built packages and lets the worker upload them to Apple. */
+export const approvePackages = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ jobId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: job, error: jobError } = await context.supabase
+      .from("delivery_jobs")
+      .select("id, upload_id, state")
+      .eq("id", data.jobId)
+      .maybeSingle();
+    if (jobError) throw new Error(jobError.message);
+    if (!job) throw new Error("Job not found");
+    if (job.state !== "awaiting_approval")
+      return { ok: false as const, message: "This job is not waiting for approval." };
+
+    const { error } = await context.supabase
+      .from("delivery_jobs")
+      .update({ approved_for_delivery: true, state: "queued", error_message: null, lease_until: null })
+      .eq("id", data.jobId);
+    if (error) throw new Error(error.message);
+    await context.supabase.from("uploads").update({ status: "packaging" }).eq("id", job.upload_id);
+    return { ok: true as const, message: "Approved — the worker will upload to Apple." };
+  });
+
+/** Admin rejects the built packages; nothing is sent to Apple. */
+export const rejectPackages = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ jobId: z.string().uuid(), reason: z.string().trim().max(500).optional() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: job, error: jobError } = await context.supabase
+      .from("delivery_jobs")
+      .select("id, upload_id, state")
+      .eq("id", data.jobId)
+      .maybeSingle();
+    if (jobError) throw new Error(jobError.message);
+    if (!job) throw new Error("Job not found");
+    if (job.state !== "awaiting_approval")
+      return { ok: false as const, message: "This job is not waiting for approval." };
+
+    const { error } = await context.supabase
+      .from("delivery_jobs")
+      .update({
+        state: "failed",
+        error_message: data.reason || "Packages rejected by admin",
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", data.jobId);
+    if (error) throw new Error(error.message);
+    await context.supabase.from("uploads").update({ status: "ready" }).eq("id", job.upload_id);
+    return { ok: true as const, message: "Packages rejected — nothing was sent to Apple." };
   });
 
 /** Clears a job that no worker has picked up, so the release can be re-queued. */
