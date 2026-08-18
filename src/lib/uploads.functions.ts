@@ -328,7 +328,7 @@ export const getUpload = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     if (!upload) throw new Error("Upload not found");
 
-    const [{ data: files }, { data: tracks }, { data: jobs }] = await Promise.all([
+    const [{ data: files }, { data: tracks }, { data: jobs }, { data: packages }] = await Promise.all([
       context.supabase
         .from("upload_files")
         .select("id, role, filename, storage_key, content_type, bytes")
@@ -344,13 +344,25 @@ export const getUpload = createServerFn({ method: "POST" })
         .select("id, state, attempts, error_message, apple_ticket, created_at, finished_at")
         .eq("upload_id", data.id)
         .order("created_at", { ascending: false }),
+      context.supabase
+        .from("delivery_packages")
+        .select("id, job_id, vendor_id, title, state, apple_ticket, error_message, updated_at")
+        .eq("upload_id", data.id)
+        .order("vendor_id"),
     ]);
 
     const withUrls = await Promise.all(
       (files ?? []).map(async (f) => ({ ...f, url: await b2.previewUrl(f.storage_key) })),
     );
 
-    return { upload, files: withUrls, tracks: tracks ?? [], jobs: jobs ?? [] };
+    return {
+      upload,
+      files: withUrls,
+      tracks: tracks ?? [],
+      jobs: jobs ?? [],
+      packages: packages ?? [],
+    };
+
   });
 
 export const deleteUpload = createServerFn({ method: "POST" })
