@@ -12,6 +12,7 @@ import {
   queueDelivery,
   releaseIsrcsForUpload,
   retryDelivery,
+  previewMetadata,
   saveSheet,
   setUploadStatus,
 } from "@/lib/delivery.functions";
@@ -129,6 +130,12 @@ function UploadDetail() {
   const editFn = useServerFn(adminEditUpload);
   const deleteFileFn = useServerFn(deleteUploadFile);
   const logsFn = useServerFn(deliveryLogs);
+  const previewFn = useServerFn(previewMetadata);
+
+  const [preview, setPreview] = useState<
+    | null
+    | { total: number; packages: { vendorId: string; title: string; xml: string }[]; warnings: string[] }
+  >(null);
 
   const activeJob = detail.data?.jobs[0];
   const logs = useQuery({
@@ -158,6 +165,7 @@ function UploadDetail() {
   if (!detail.data) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Upload not found.</main>;
 
   const { upload, files, jobs, packages } = detail.data;
+  const locked = !["draft", "uploaded", "in_review", "rejected"].includes(String(upload.status));
   const artwork = files.filter((f) => f.role === "artwork");
   const audio = files.filter((f) => f.role === "audio");
   const docs = files.filter((f) => f.role !== "audio" && f.role !== "artwork");
@@ -219,7 +227,21 @@ function UploadDetail() {
               size="sm"
               disabled={busy || upload.status !== "ready"}
               title={upload.status !== "ready" ? "Approve the release first" : undefined}
-              onClick={() => run("Queued", () => queueFn({ data: { uploadId: id } }))}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const result = await previewFn({ data: { uploadId: id } });
+                  setPreview(result);
+                  setTimeout(
+                    () => document.getElementById("metadata-preview")?.scrollIntoView({ behavior: "smooth" }),
+                    50,
+                  );
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not build the metadata preview.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
             >
               Package &amp; deliver
             </Button>
@@ -230,6 +252,12 @@ function UploadDetail() {
       {isAdmin && upload.status !== "ready" && (
         <p className="mt-4 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
           This release is not approved yet. Review the files and the sheet, then press Approve to unlock delivery.
+        </p>
+      )}
+
+      {isAdmin && locked && (
+        <p className="mt-4 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
+          This release is approved and locked. Press <strong>In review</strong> to edit the details or the sheet again.
         </p>
       )}
 
