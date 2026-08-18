@@ -21,9 +21,30 @@ const env = (name, fallback) => {
   return value;
 };
 
-const supabase = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
-  auth: { persistSession: false },
+// The worker authenticates as a dedicated admin account (email + password) using
+// the public anon key. No service-role key is needed or available.
+const supabase = createClient(env("SUPABASE_URL"), env("SUPABASE_ANON_KEY"), {
+  auth: { persistSession: false, autoRefreshToken: true },
 });
+
+const WORKER_EMAIL = env("WORKER_EMAIL");
+const WORKER_PASSWORD = env("WORKER_PASSWORD");
+
+async function signIn() {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: WORKER_EMAIL,
+    password: WORKER_PASSWORD,
+  });
+  if (error) throw new Error(`Worker sign-in failed: ${error.message}`);
+  const { data: isAdmin, error: roleError } = await supabase.rpc("has_role", {
+    _user_id: data.user.id,
+    _role: "admin",
+  });
+  if (roleError) throw new Error(`Could not verify worker role: ${roleError.message}`);
+  if (!isAdmin) throw new Error(`${WORKER_EMAIL} is not an admin account — grant it the admin role first.`);
+  console.log(`Signed in as ${WORKER_EMAIL}`);
+}
+
 
 const s3 = new S3Client({
   region: new URL(env("B2_ENDPOINT")).hostname.split(".")[1],
@@ -223,6 +244,12 @@ async function tick() {
     _lease_seconds: 3600,
   });
   if (error) {
+    // Session expired or was invalidated — sign in again on the next loop.
+    if (/jwt|token|unauthor/i.test(error.message)) {
+      console.error("session lost, signing in again:", error.message);
+      await signIn();
+      return false;
+    }
     console.error("claim failed:", error.message);
     return false;
   }
@@ -233,6 +260,7 @@ async function tick() {
 }
 
 async function main() {
+  await signIn();
   console.log(`${WORKER_ID} polling every ${POLL_MS}ms`);
   for (;;) {
     let worked = false;
@@ -244,5 +272,6 @@ async function main() {
     if (!worked) await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }
+
 
 main();

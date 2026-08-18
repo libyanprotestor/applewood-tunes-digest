@@ -10,6 +10,8 @@ import {
   assignCodesToUpload,
   deliveryLogs,
   queueDelivery,
+  cancelDelivery,
+
   releaseIsrcsForUpload,
   retryDelivery,
   previewMetadata,
@@ -126,6 +128,8 @@ function UploadDetail() {
   const queueFn = useServerFn(queueDelivery);
   const statusFn = useServerFn(setUploadStatus);
   const retryFn = useServerFn(retryDelivery);
+  const cancelFn = useServerFn(cancelDelivery);
+
   const deleteFn = useServerFn(deleteUpload);
   const editFn = useServerFn(adminEditUpload);
   const deleteFileFn = useServerFn(deleteUploadFile);
@@ -733,19 +737,32 @@ function UploadDetail() {
               <li key={j.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
                 <span>
                   {j.state} · attempt {j.attempts ?? 0}
+                  {j.worker_id ? ` · worker ${j.worker_id}` : ""}
                   {j.apple_ticket ? ` · ticket ${j.apple_ticket}` : ""}
                   {j.error_message ? ` · ${j.error_message}` : ""}
                 </span>
-                {isAdmin && j.state === "failed" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => run("Requeued", () => retryFn({ data: { jobId: j.id } }))}
-                  >
-                    Retry
-                  </Button>
-                )}
+                <span className="flex gap-2">
+                  {isAdmin && j.state === "queued" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => run("Cancelled", () => cancelFn({ data: { jobId: j.id } }))}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                  {isAdmin && j.state === "failed" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => run("Requeued", () => retryFn({ data: { jobId: j.id } }))}
+                    >
+                      Retry
+                    </Button>
+                  )}
+                </span>
               </li>
             ))}
           </ul>
@@ -754,9 +771,11 @@ function UploadDetail() {
 
           <p className="mt-3 rounded-xl border border-border bg-secondary/60 p-3 text-xs text-muted-foreground">
             Queued and waiting for the delivery worker to pick it up. Packaging and the Apple upload happen on your
-            Transporter machine — if no worker is running, the job stays queued.
+            Transporter machine — if no worker is running, the job stays queued. See worker/README.md for the setup
+            steps, or cancel the job to unlock this release.
           </p>
         )}
+
 
         {(logs.data ?? []).length > 0 && (
           <pre className="mt-4 max-h-72 overflow-auto rounded-xl bg-secondary p-4 text-xs leading-relaxed">

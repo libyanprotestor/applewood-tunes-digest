@@ -341,7 +341,7 @@ export const getUpload = createServerFn({ method: "POST" })
         .order("track_number"),
       context.supabase
         .from("delivery_jobs")
-        .select("id, state, attempts, error_message, apple_ticket, created_at, finished_at")
+        .select("id, state, attempts, error_message, apple_ticket, created_at, finished_at, worker_id, claimed_at")
         .eq("upload_id", data.id)
         .order("created_at", { ascending: false }),
       context.supabase
