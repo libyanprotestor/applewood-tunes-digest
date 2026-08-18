@@ -293,3 +293,45 @@ export const storageStatus = createServerFn({ method: "GET" })
     const b2 = await import("./b2.server");
     return { configured: b2.storageConfigured() };
   });
+
+/** Admin removes a single file from an upload (storage object plus row). */
+export const deleteUploadFile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ uploadId: z.string().uuid(), fileId: z.string().uuid() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+    const b2 = await import("./b2.server");
+
+    const { data: file } = await context.supabase
+      .from("upload_files")
+      .select("storage_key")
+      .eq("id", data.fileId)
+      .eq("upload_id", data.uploadId)
+      .maybeSingle();
+    if (!file) return { ok: false as const, message: "That file is already gone." };
+
+    try {
+      await b2.deleteObject(file.storage_key);
+    } catch {
+      /* the row goes away even when the object is missing */
+    }
+    await context.supabase.from("upload_tracks").update({ file_id: null }).eq("file_id", data.fileId);
+    const { error } = await context.supabase.from("upload_files").delete().eq("id", data.fileId);
+    if (error) throw new Error(error.message);
+
+    const { data: files } = await context.supabase
+      .from("upload_files")
+      .select("bytes")
+      .eq("upload_id", data.uploadId);
+    await context.supabase
+      .from("uploads")
+      .update({
+        total_bytes: (files ?? []).reduce((a, f) => a + Number(f.bytes ?? 0), 0),
+        file_count: (files ?? []).length,
+      })
+      .eq("id", data.uploadId);
+    return { ok: true as const, message: "File deleted." };
+  });

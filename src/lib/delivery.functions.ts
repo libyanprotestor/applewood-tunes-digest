@@ -343,3 +343,35 @@ export const deliveryQueue = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return data ?? [];
   });
+
+/** Admin edits the release header (title, type, artist, UPC, release date). */
+export const adminEditUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        uploadId: z.string().uuid(),
+        title: z.string().trim().min(1).max(300),
+        kind: z.enum(["album", "singles", "ringtones"]),
+        artistName: z.string().trim().max(300).optional(),
+        upc: z.string().trim().max(40).optional(),
+        releaseDate: z.string().trim().max(10).optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+    const { error } = await context.supabase
+      .from("uploads")
+      .update({
+        title: data.title,
+        kind: data.kind,
+        artist_name: data.artistName || null,
+        upc: data.upc || null,
+        release_date: data.releaseDate || null,
+      })
+      .eq("id", data.uploadId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const, message: "Release details saved." };
+  });
