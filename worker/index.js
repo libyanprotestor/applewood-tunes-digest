@@ -342,6 +342,7 @@ async function tick() {
 }
 
 async function main() {
+  await resolveTransporter();
   await signIn();
   console.log(`${WORKER_ID} polling every ${POLL_MS}ms`);
   for (;;) {
