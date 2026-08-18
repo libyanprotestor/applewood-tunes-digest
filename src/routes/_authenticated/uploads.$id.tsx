@@ -78,6 +78,8 @@ function UploadDetail() {
 
   useEffect(() => {
     if (!detail.data) return;
+    setTitle(detail.data.upload.title ?? "");
+    setKind((detail.data.upload.kind as "album" | "singles" | "ringtones") ?? "album");
     setArtist(detail.data.upload.artist_name ?? "");
     setUpc(detail.data.upload.upc ?? "");
     setReleaseDate(detail.data.upload.release_date ?? "");
