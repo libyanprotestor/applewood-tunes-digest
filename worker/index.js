@@ -244,6 +244,12 @@ async function tick() {
     _lease_seconds: 3600,
   });
   if (error) {
+    // Session expired or was invalidated — sign in again on the next loop.
+    if (/jwt|token|unauthor/i.test(error.message)) {
+      console.error("session lost, signing in again:", error.message);
+      await signIn();
+      return false;
+    }
     console.error("claim failed:", error.message);
     return false;
   }
@@ -254,6 +260,7 @@ async function tick() {
 }
 
 async function main() {
+  await signIn();
   console.log(`${WORKER_ID} polling every ${POLL_MS}ms`);
   for (;;) {
     let worked = false;
@@ -265,5 +272,6 @@ async function main() {
     if (!worked) await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }
+
 
 main();
