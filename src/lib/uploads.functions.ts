@@ -336,7 +336,7 @@ export const getUpload = createServerFn({ method: "POST" })
         .order("filename"),
       context.supabase
         .from("upload_tracks")
-        .select("id, file_id, track_number, title, version, artist_name, isrc, explicit")
+        .select("id, file_id, artwork_file_id, folder_number, track_number, title, version, artist_name, isrc, explicit")
         .eq("upload_id", data.id)
         .order("track_number"),
       context.supabase
