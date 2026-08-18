@@ -727,6 +727,7 @@ function UploadDetail() {
         {jobs.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">No delivery has been started yet.</p>
         ) : (
+
           <ul className="mt-3 space-y-2">
             {jobs.map((j) => (
               <li key={j.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
