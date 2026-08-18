@@ -38,6 +38,7 @@ export type Database = {
       delivery_jobs: {
         Row: {
           apple_ticket: string | null
+          approved_for_delivery: boolean
           attempts: number
           claimed_at: string | null
           created_at: string
@@ -52,6 +53,7 @@ export type Database = {
         }
         Insert: {
           apple_ticket?: string | null
+          approved_for_delivery?: boolean
           attempts?: number
           claimed_at?: string | null
           created_at?: string
@@ -66,6 +68,7 @@ export type Database = {
         }
         Update: {
           apple_ticket?: string | null
+          approved_for_delivery?: boolean
           attempts?: number
           claimed_at?: string | null
           created_at?: string
@@ -127,6 +130,8 @@ export type Database = {
           error_message: string | null
           id: string
           job_id: string
+          manifest: Json | null
+          metadata_xml: string | null
           state: Database["public"]["Enums"]["delivery_state"]
           title: string | null
           updated_at: string
@@ -139,6 +144,8 @@ export type Database = {
           error_message?: string | null
           id?: string
           job_id: string
+          manifest?: Json | null
+          metadata_xml?: string | null
           state?: Database["public"]["Enums"]["delivery_state"]
           title?: string | null
           updated_at?: string
@@ -151,6 +158,8 @@ export type Database = {
           error_message?: string | null
           id?: string
           job_id?: string
+          manifest?: Json | null
+          metadata_xml?: string | null
           state?: Database["public"]["Enums"]["delivery_state"]
           title?: string | null
           updated_at?: string
