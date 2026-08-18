@@ -126,6 +126,8 @@ function UploadDetail() {
   const queueFn = useServerFn(queueDelivery);
   const statusFn = useServerFn(setUploadStatus);
   const retryFn = useServerFn(retryDelivery);
+  const cancelFn = useServerFn(cancelDelivery);
+
   const deleteFn = useServerFn(deleteUpload);
   const editFn = useServerFn(adminEditUpload);
   const deleteFileFn = useServerFn(deleteUploadFile);
