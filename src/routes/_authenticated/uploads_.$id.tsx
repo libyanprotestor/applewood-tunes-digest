@@ -750,7 +750,8 @@ function UploadDetail() {
             ))}
           </ul>
         )}
-        {jobs.some((j) => j.state === "queued" && !j.worker_id) && (
+        {jobs.some((j) => j.state === "queued") && (
+
           <p className="mt-3 rounded-xl border border-border bg-secondary/60 p-3 text-xs text-muted-foreground">
             Queued and waiting for the delivery worker to pick it up. Packaging and the Apple upload happen on your
             Transporter machine — if no worker is running, the job stays queued.
