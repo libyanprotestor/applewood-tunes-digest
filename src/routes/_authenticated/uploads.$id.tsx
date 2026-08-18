@@ -177,8 +177,27 @@ function UploadDetail() {
               Reject
             </Button>
             <Button
+              variant="outline"
               size="sm"
               disabled={busy}
+              onClick={() =>
+                run("Cancelled", () => statusFn({ data: { uploadId: id, status: "cancelled" } }))
+              }
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={upload.status === "ready" ? "outline" : "default"}
+              size="sm"
+              disabled={busy}
+              onClick={() => run("Approved for delivery", () => statusFn({ data: { uploadId: id, status: "ready" } }))}
+            >
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              disabled={busy || upload.status !== "ready"}
+              title={upload.status !== "ready" ? "Approve the release first" : undefined}
               onClick={() => run("Queued", () => queueFn({ data: { uploadId: id } }))}
             >
               Package &amp; deliver
@@ -186,6 +205,12 @@ function UploadDetail() {
           </div>
         )}
       </div>
+
+      {isAdmin && upload.status !== "ready" && (
+        <p className="mt-4 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
+          This release is not approved yet. Review the files and the sheet, then press Approve to unlock delivery.
+        </p>
+      )}
 
       {upload.rejection_reason && (
         <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
