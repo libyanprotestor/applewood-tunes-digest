@@ -7,13 +7,15 @@ import {
   createUpload,
   finishFileUpload,
   listUploads,
+  registerExtracted,
+  setExtractError,
   startFileUpload,
   storageStatus,
-  submitUpload,
 } from "@/lib/uploads.functions";
 import { getViewer } from "@/lib/analytics.functions";
 import { listSublabels } from "@/lib/admin.functions";
 import { formatBytes, pushFile } from "@/lib/upload-client";
+import { parseReleaseZip, readZip, type Extracted } from "@/lib/zip-parse";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 
 export const Route = createFileRoute("/_authenticated/uploads")({
   head: () => ({
