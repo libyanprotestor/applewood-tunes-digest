@@ -82,6 +82,10 @@ function UploadDetail() {
   const [upc, setUpc] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [genre, setGenre] = useState("");
+  const [language, setLanguage] = useState("");
+  const [labelName, setLabelName] = useState("");
+  const [copyrightLine, setCopyrightLine] = useState("");
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -93,9 +97,14 @@ function UploadDetail() {
     setUpc(detail.data.upload.upc ?? "");
     setReleaseDate(detail.data.upload.release_date ?? "");
     setNotes(detail.data.upload.admin_notes ?? "");
+    setGenre(detail.data.upload.genre_code ?? "");
+    setLanguage(detail.data.upload.language ?? "");
+    setLabelName(detail.data.upload.label_name ?? "");
+    setCopyrightLine(detail.data.upload.copyright_line ?? "");
     setTracks(
       detail.data.tracks.map((t) => ({
         id: t.id,
+        folderNumber: t.folder_number ?? null,
         trackNumber: t.track_number ?? 1,
         title: t.title ?? "",
         version: t.version ?? "",
@@ -108,7 +117,8 @@ function UploadDetail() {
 
   const saveFn = useServerFn(saveSheet);
   const artistFn = useServerFn(applyArtistToAll);
-  const assignFn = useServerFn(assignIsrcsToUpload);
+  const assignFn = useServerFn(assignCodesToUpload);
+
   const releaseFn = useServerFn(releaseIsrcsForUpload);
   const queueFn = useServerFn(queueDelivery);
   const statusFn = useServerFn(setUploadStatus);
