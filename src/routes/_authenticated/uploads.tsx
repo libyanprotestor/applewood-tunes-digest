@@ -214,7 +214,8 @@ function UploadsPage() {
     <main className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-semibold tracking-tight">Release uploads</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Files go straight from this browser to secure storage, then packaging and Apple delivery happen automatically.
+        Drop one zip per release. It is unpacked here, checked against the sheet inside it, and sent straight to
+        secure storage for the label to review.
       </p>
 
       {storage.data && !storage.data.configured && (
@@ -225,10 +226,18 @@ function UploadsPage() {
 
       <section className="mt-8 rounded-2xl border border-border bg-card p-6">
         <h2 className="text-sm font-semibold">New release</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <Label className="text-xs">Type</Label>
-            <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+            <Select
+              value={kind}
+              onValueChange={(v) => {
+                setKind(v as typeof kind);
+                setParsed(null);
+                setParseError(null);
+                setZip(null);
+              }}
+            >
               <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>
@@ -240,14 +249,6 @@ function UploadsPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Title</Label>
-            <Input className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-          <div>
-            <Label className="text-xs">Artist (optional)</Label>
-            <Input className="mt-1" value={artist} onChange={(e) => setArtist(e.target.value)} />
           </div>
           {isAdmin && (
             <div>
@@ -269,39 +270,66 @@ function UploadsPage() {
         </div>
 
         <div className="mt-4">
-          <Label className="text-xs">Audio, artwork and any sheet</Label>
+          <Label className="text-xs">Release zip</Label>
           <Input
             type="file"
-            multiple
+            accept=".zip,application/zip"
             className="mt-1"
-            onChange={(e) => setFiles([...(e.target.files ?? [])])}
+            onChange={(e) => void handlePick(e.target.files?.[0] ?? null)}
             disabled={busy}
           />
-          {files.length > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {kind === "album"
+              ? "Album zip: a folder with the songs and the cover, plus a sheet whose first row is the album title and the rows below are the song titles."
+              : "Ringtone zip: a folder holding the sheet and folders numbered 1…n, each with one ringtone and one picture."}
+          </p>
+        </div>
+
+        {parseError && (
+          <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+            {parseError}
+          </p>
+        )}
+
+        {parsed && (
+          <div className="mt-4 rounded-xl border border-border bg-secondary/40 p-4">
+            <p className="text-sm font-medium">{parsed.albumTitle}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {parsed.tracks.length} {kind === "album" ? "songs" : "ringtones"} ·{" "}
+              {parsed.files.filter((f) => f.role === "artwork").length} images ·{" "}
+              {formatBytes(parsed.files.reduce((a, f) => a + f.blob.size, 0))}
+            </p>
+            {parsed.warnings.length > 0 && (
+              <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground">
+                {parsed.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            )}
             <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto text-xs">
-              {files.map((f) => (
+              {parsed.files.map((f) => (
                 <li key={f.name} className="flex items-center justify-between gap-3">
-                  <span className="truncate">{f.name}</span>
+                  <span className="truncate">
+                    {f.folder ? `${f.folder} · ` : ""}
+                    {f.name}
+                  </span>
                   <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {formatBytes(f.size)}
-                    {progress[f.name] !== undefined
-                      ? ` · ${Math.round((progress[f.name] ?? 0) * 100)}%`
-                      : ""}
+                    {formatBytes(f.blob.size)}
+                    {progress[f.name] !== undefined ? ` · ${Math.round((progress[f.name] ?? 0) * 100)}%` : ""}
                   </span>
                 </li>
               ))}
             </ul>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="mt-4 flex items-center gap-3">
-          <Button onClick={handleUpload} disabled={busy}>
-            {busy ? "Uploading…" : "Upload and submit"}
+          <Button onClick={handleUpload} disabled={busy || !parsed}>
+            {busy ? "Working…" : "Upload and submit"}
           </Button>
-          {files.length > 0 && (
-            <span className="text-xs text-muted-foreground">{formatBytes(totalBytes)} total</span>
-          )}
+          {zip && <span className="text-xs text-muted-foreground">{zip.name}</span>}
         </div>
+
       </section>
 
       <section className="mt-8 rounded-2xl border border-border bg-card">
