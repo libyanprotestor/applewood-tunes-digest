@@ -951,6 +951,7 @@ export type Database = {
         | "uploading"
         | "succeeded"
         | "failed"
+        | "awaiting_approval"
       item_type: "ringtone" | "single" | "album" | "other"
       run_status: "pending" | "success" | "not_ready" | "failed"
       upload_file_role: "audio" | "artwork" | "document" | "other"
@@ -965,6 +966,7 @@ export type Database = {
         | "delivered"
         | "rejected"
         | "cancelled"
+        | "awaiting_approval"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1100,6 +1102,7 @@ export const Constants = {
         "uploading",
         "succeeded",
         "failed",
+        "awaiting_approval",
       ],
       item_type: ["ringtone", "single", "album", "other"],
       run_status: ["pending", "success", "not_ready", "failed"],
@@ -1115,6 +1118,7 @@ export const Constants = {
         "delivered",
         "rejected",
         "cancelled",
+        "awaiting_approval",
       ],
     },
   },
