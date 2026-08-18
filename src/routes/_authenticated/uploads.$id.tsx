@@ -276,15 +276,77 @@ function UploadDetail() {
           <ul className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
             {audio.map((f) => (
               <li key={f.id}>
-                <p className="truncate text-xs">
-                  {f.filename} · {formatBytes(Number(f.bytes ?? 0))}
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-xs">
+                    {f.filename} · {formatBytes(Number(f.bytes ?? 0))}
+                  </p>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="shrink-0 text-xs text-destructive hover:underline"
+                      onClick={() => {
+                        if (!window.confirm(`Delete ${f.filename}?`)) return;
+                        void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
                 <audio controls preload="none" src={f.url} className="mt-1 w-full" />
               </li>
             ))}
           </ul>
         </section>
       </div>
+
+      {isAdmin && (
+        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <h2 className="text-sm font-semibold">Release details</h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <div>
+              <Label className="text-xs">Title</Label>
+              <Input className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Type</Label>
+              <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="album">Album</SelectItem>
+                  <SelectItem value="singles">Singles</SelectItem>
+                  <SelectItem value="ringtones">Ringtones</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end">
+              <Button
+                disabled={busy || !title.trim()}
+                onClick={() =>
+                  run("Release details saved", () =>
+                    editFn({
+                      data: {
+                        uploadId: id,
+                        title: title.trim(),
+                        kind,
+                        artistName: artist || undefined,
+                        upc: upc || undefined,
+                        releaseDate: releaseDate || undefined,
+                      },
+                    }),
+                  )
+                }
+              >
+                Save details
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
+
 
       {isAdmin && (
         <section className="mt-8 rounded-2xl border border-border bg-card p-6">
