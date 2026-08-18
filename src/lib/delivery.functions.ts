@@ -66,6 +66,8 @@ export const assignIsrcsToUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
 
     const { data: tracks, error } = await context.supabase
       .from("upload_tracks")
@@ -119,6 +121,8 @@ export const releaseIsrcsForUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
     const { data: tracks } = await context.supabase
       .from("upload_tracks")
       .select("id")
@@ -179,6 +183,8 @@ export const saveSheet = createServerFn({ method: "POST" })
     const { assertAdmin } = await import("./guards.server");
     const { normalizeIsrc, isrcValid } = await import("./uploads.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
 
     const seen = new Set<string>();
     for (const t of data.tracks) {
@@ -227,6 +233,8 @@ export const applyArtistToAll = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
     await context.supabase.from("uploads").update({ artist_name: data.artistName }).eq("id", data.uploadId);
     const { error } = await context.supabase
       .from("upload_tracks")
@@ -381,6 +389,8 @@ export const adminEditUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
     const { error } = await context.supabase
       .from("uploads")
       .update({
@@ -411,6 +421,8 @@ export const assignCodesToUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./guards.server");
     await assertAdmin(context.supabase, context.userId);
+    const { assertUploadEditable } = await import("./guards.server");
+    await assertUploadEditable(context.supabase, data.uploadId);
 
     const { data: upload, error: upErr } = await context.supabase
       .from("uploads")

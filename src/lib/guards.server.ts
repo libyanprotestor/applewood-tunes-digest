@@ -21,3 +21,15 @@ export async function getViewerScope(supabase: SupabaseClient, userId: string) {
     fullName: (profile?.full_name as string | null) ?? null,
   };
 }
+
+/** Statuses in which an admin may still edit the release or its sheet. */
+export const EDITABLE_UPLOAD_STATUSES = ["draft", "uploaded", "in_review", "rejected"];
+
+/** Throws when a release is approved/locked; the admin must move it back to In review. */
+export async function assertUploadEditable(supabase: SupabaseClient, uploadId: string): Promise<void> {
+  const { data, error } = await supabase.from("uploads").select("status").eq("id", uploadId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Upload not found");
+  if (!EDITABLE_UPLOAD_STATUSES.includes(String(data.status)))
+    throw new Error("This release is locked. Move it back to In review before editing.");
+}
