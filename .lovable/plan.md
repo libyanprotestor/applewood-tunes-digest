@@ -27,9 +27,9 @@ Delivery stays blocked until artist name and every code is filled.
 ## Packaging output
 
 - **Album** → one folder `<albumcode>.itmsp` containing the artwork, every audio file and `metadata.xml`, matching the structure of the sample you supplied (`music5.1`, provider, album block with genres/artists/roles/copyright/label/artwork/products, then one `<track>` per song with vendor_id, isrc, title, volume + track number, `audio_file` with size and md5 checksum).
-- **Ringtones** → one `<code>.itmsp` per numbered folder, each containing that ringtone's audio, its picture and its own `metadata.xml` in Apple's tone format. Each package is delivered to Apple separately and gets its own status row.
+- **Ringtones** → one `<code>.itmsp` per numbered folder. Confirmed from your two ringtone files: same `music5.1` album wrapper, but with `<album_type>ringtone</album_type>`, genre `RINGTONES-00`, that folder's picture as the single artwork file, `<products>` carrying `sales_start_date`, and exactly one `<track>` whose `vendor_id` = `isrc` = the album `vendor_id`, with `<type>ringtone</type>`, `track_number` 1 and the audio file's size + md5. No `track_count`, no `preorder_previews`, no per-track artists block. Each package is delivered to Apple separately and gets its own status row.
+- Album packages keep the album-level code as `vendor_id`/UPC and give each track the next pool code, exactly as in your album sample (album ...230, tracks ...231, ...232).
 
-I'll match the ringtone `metadata.xml` byte-for-byte against the two files you're uploading before writing the generator.
 
 ## Technical notes
 
