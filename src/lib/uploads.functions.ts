@@ -321,7 +321,7 @@ export const getUpload = createServerFn({ method: "POST" })
     const { data: upload, error } = await context.supabase
       .from("uploads")
       .select(
-        "id, kind, title, artist_name, upc, release_date, status, total_bytes, file_count, admin_notes, rejection_reason, created_at, sublabel_id, sublabels(name)",
+        "id, kind, title, artist_name, upc, release_date, status, total_bytes, file_count, admin_notes, rejection_reason, extract_error, genre_code, language, label_name, copyright_pline, copyright_cline, created_at, sublabel_id, sublabels(name)",
       )
       .eq("id", data.id)
       .maybeSingle();
