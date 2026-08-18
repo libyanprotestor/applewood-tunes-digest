@@ -320,14 +320,29 @@ async function processJob(jobId, uploadId) {
   }
 }
 
+/** Makes sure we still hold a valid access token before every poll. */
+async function ensureSession() {
+  const { data } = await supabase.auth.getSession();
+  const session = data?.session;
+  const expiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
+  if (!session || expiresAt - Date.now() < 60_000) {
+    if (session) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      if (refreshed?.session) return;
+    }
+    await signIn();
+  }
+}
+
 async function tick() {
+  await ensureSession();
   const { data, error } = await supabase.rpc("claim_delivery_job", {
     _worker_id: WORKER_ID,
     _lease_seconds: 3600,
   });
   if (error) {
-    // Session expired or was invalidated — sign in again on the next loop.
-    if (/jwt|token|unauthor/i.test(error.message)) {
+    // Session expired or was invalidated — sign in again and retry once.
+    if (/jwt|token|unauthor|permission denied/i.test(error.message)) {
       console.error("session lost, signing in again:", error.message);
       await signIn();
       return false;
@@ -340,6 +355,7 @@ async function tick() {
   await processJob(job.job_id, job.upload_id);
   return true;
 }
+
 
 async function main() {
   await resolveTransporter();
