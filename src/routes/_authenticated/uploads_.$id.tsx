@@ -10,6 +10,8 @@ import {
   assignCodesToUpload,
   deliveryLogs,
   queueDelivery,
+  cancelDelivery,
+
   releaseIsrcsForUpload,
   retryDelivery,
   previewMetadata,
