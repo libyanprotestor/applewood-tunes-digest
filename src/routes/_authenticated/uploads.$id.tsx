@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { getUpload, deleteUpload } from "@/lib/uploads.functions";
+import { getUpload, deleteUpload, deleteUploadFile } from "@/lib/uploads.functions";
 import {
+  adminEditUpload,
   applyArtistToAll,
   assignIsrcsToUpload,
   deliveryLogs,
@@ -19,6 +20,13 @@ import { formatBytes } from "@/lib/upload-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/uploads/$id")({
   head: () => ({
@@ -59,6 +67,8 @@ function UploadDetail() {
   const getFn = useServerFn(getUpload);
   const detail = useQuery({ queryKey: ["upload", id], queryFn: () => getFn({ data: { id } }) });
 
+  const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<"album" | "singles" | "ringtones">("album");
   const [artist, setArtist] = useState("");
   const [upc, setUpc] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
@@ -68,6 +78,8 @@ function UploadDetail() {
 
   useEffect(() => {
     if (!detail.data) return;
+    setTitle(detail.data.upload.title ?? "");
+    setKind((detail.data.upload.kind as "album" | "singles" | "ringtones") ?? "album");
     setArtist(detail.data.upload.artist_name ?? "");
     setUpc(detail.data.upload.upc ?? "");
     setReleaseDate(detail.data.upload.release_date ?? "");
@@ -93,6 +105,8 @@ function UploadDetail() {
   const statusFn = useServerFn(setUploadStatus);
   const retryFn = useServerFn(retryDelivery);
   const deleteFn = useServerFn(deleteUpload);
+  const editFn = useServerFn(adminEditUpload);
+  const deleteFileFn = useServerFn(deleteUploadFile);
   const logsFn = useServerFn(deliveryLogs);
 
   const activeJob = detail.data?.jobs[0];
@@ -163,8 +177,27 @@ function UploadDetail() {
               Reject
             </Button>
             <Button
+              variant="outline"
               size="sm"
               disabled={busy}
+              onClick={() =>
+                run("Cancelled", () => statusFn({ data: { uploadId: id, status: "cancelled" } }))
+              }
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={upload.status === "ready" ? "outline" : "default"}
+              size="sm"
+              disabled={busy}
+              onClick={() => run("Approved for delivery", () => statusFn({ data: { uploadId: id, status: "ready" } }))}
+            >
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              disabled={busy || upload.status !== "ready"}
+              title={upload.status !== "ready" ? "Approve the release first" : undefined}
               onClick={() => run("Queued", () => queueFn({ data: { uploadId: id } }))}
             >
               Package &amp; deliver
@@ -172,6 +205,12 @@ function UploadDetail() {
           </div>
         )}
       </div>
+
+      {isAdmin && upload.status !== "ready" && (
+        <p className="mt-4 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
+          This release is not approved yet. Review the files and the sheet, then press Approve to unlock delivery.
+        </p>
+      )}
 
       {upload.rejection_reason && (
         <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
@@ -187,15 +226,30 @@ function UploadDetail() {
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-3">
               {artwork.map((f) => (
-                <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
-                  <img
-                    src={f.url}
-                    alt={f.filename}
-                    loading="lazy"
-                    className="aspect-square w-full rounded-lg border border-border object-cover"
-                  />
-                  <span className="mt-1 block truncate text-xs text-muted-foreground">{f.filename}</span>
-                </a>
+                <div key={f.id}>
+                  <a href={f.url} target="_blank" rel="noreferrer">
+                    <img
+                      src={f.url}
+                      alt={f.filename}
+                      loading="lazy"
+                      className="aspect-square w-full rounded-lg border border-border object-cover"
+                    />
+                    <span className="mt-1 block truncate text-xs text-muted-foreground">{f.filename}</span>
+                  </a>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="mt-1 text-xs text-destructive hover:underline"
+                      onClick={() => {
+                        if (!window.confirm(`Delete ${f.filename}?`)) return;
+                        void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -222,15 +276,77 @@ function UploadDetail() {
           <ul className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
             {audio.map((f) => (
               <li key={f.id}>
-                <p className="truncate text-xs">
-                  {f.filename} · {formatBytes(Number(f.bytes ?? 0))}
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-xs">
+                    {f.filename} · {formatBytes(Number(f.bytes ?? 0))}
+                  </p>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="shrink-0 text-xs text-destructive hover:underline"
+                      onClick={() => {
+                        if (!window.confirm(`Delete ${f.filename}?`)) return;
+                        void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
                 <audio controls preload="none" src={f.url} className="mt-1 w-full" />
               </li>
             ))}
           </ul>
         </section>
       </div>
+
+      {isAdmin && (
+        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <h2 className="text-sm font-semibold">Release details</h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <div>
+              <Label className="text-xs">Title</Label>
+              <Input className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Type</Label>
+              <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="album">Album</SelectItem>
+                  <SelectItem value="singles">Singles</SelectItem>
+                  <SelectItem value="ringtones">Ringtones</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end">
+              <Button
+                disabled={busy || !title.trim()}
+                onClick={() =>
+                  run("Release details saved", () =>
+                    editFn({
+                      data: {
+                        uploadId: id,
+                        title: title.trim(),
+                        kind,
+                        artistName: artist || undefined,
+                        upc: upc || undefined,
+                        releaseDate: releaseDate || undefined,
+                      },
+                    }),
+                  )
+                }
+              >
+                Save details
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
+
 
       {isAdmin && (
         <section className="mt-8 rounded-2xl border border-border bg-card p-6">
