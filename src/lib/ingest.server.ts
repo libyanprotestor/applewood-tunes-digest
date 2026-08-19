@@ -90,7 +90,7 @@ export async function ingestReport(reportDate: string, db?: SupabaseClient): Pro
     let revenueTotal = 0;
 
     for (const row of rows) {
-      const gross = row.units * row.price;
+      const gross = Math.round(row.units * row.price * 10000) / 10000;
       const usd = Math.round((await toUsd(gross, row.currency, row.saleDate)) * 10000) / 10000;
       const match =
         (row.isrc ? byIsrc.get(compact(row.isrc)) : undefined) ??
@@ -105,6 +105,7 @@ export async function ingestReport(reportDate: string, db?: SupabaseClient): Pro
           country_code: row.countryCode || null,
           units: row.units,
           original_currency: row.currency,
+          revenue_original: gross,
           revenue_usd: usd,
           product_type_id: row.productTypeId || null,
           report_run_id: runId ?? null,
@@ -120,11 +121,13 @@ export async function ingestReport(reportDate: string, db?: SupabaseClient): Pro
           upc: row.upc || null,
           units: row.units,
           original_currency: row.currency,
+          revenue_original: gross,
           revenue_usd: usd,
           product_type_id: row.productTypeId || null,
         });
       }
     }
+
 
     for (let i = 0; i < sales.length; i += 500) {
       const { error } = await supabaseAdmin.from("sales").insert(sales.slice(i, i + 500) as never);
