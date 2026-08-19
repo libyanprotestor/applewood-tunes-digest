@@ -351,6 +351,7 @@ export type Database = {
           original_currency: string | null
           product_type_id: string | null
           report_run_id: string | null
+          revenue_original: number
           revenue_usd: number
           sale_date: string
           sublabel_id: string
@@ -364,6 +365,7 @@ export type Database = {
           original_currency?: string | null
           product_type_id?: string | null
           report_run_id?: string | null
+          revenue_original?: number
           revenue_usd?: number
           sale_date: string
           sublabel_id: string
@@ -377,6 +379,7 @@ export type Database = {
           original_currency?: string | null
           product_type_id?: string | null
           report_run_id?: string | null
+          revenue_original?: number
           revenue_usd?: number
           sale_date?: string
           sublabel_id?: string
@@ -552,6 +555,7 @@ export type Database = {
           product_type_id: string | null
           report_run_id: string | null
           resolved: boolean
+          revenue_original: number
           revenue_usd: number
           sale_date: string
           title: string | null
@@ -568,6 +572,7 @@ export type Database = {
           product_type_id?: string | null
           report_run_id?: string | null
           resolved?: boolean
+          revenue_original?: number
           revenue_usd?: number
           sale_date: string
           title?: string | null
@@ -584,6 +589,7 @@ export type Database = {
           product_type_id?: string | null
           report_run_id?: string | null
           resolved?: boolean
+          revenue_original?: number
           revenue_usd?: number
           sale_date?: string
           title?: string | null
