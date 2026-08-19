@@ -367,7 +367,9 @@ export const assignUnmatched = createServerFn({ method: "POST" })
         country_code: row.country_code,
         units: row.units,
         original_currency: row.original_currency,
+        revenue_original: row.revenue_original,
         revenue_usd: row.revenue_usd,
+
         product_type_id: row.product_type_id,
         report_run_id: row.report_run_id,
       })),
