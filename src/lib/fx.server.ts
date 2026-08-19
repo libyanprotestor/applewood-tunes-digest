@@ -1,28 +1,53 @@
 /**
- * Currency conversion to USD using Frankfurter (ECB data, free, no API key).
- * Rates are looked up for the report date so historical figures stay stable.
+ * Currency conversion to USD for the report date, so historical figures stay stable.
+ *
+ * Two free sources, no API key:
+ *  1. Frankfurter (ECB) — accurate but only ~30 currencies (no AED, TWD, …).
+ *  2. @fawazahmed0/currency-api on jsDelivr — daily historical rates for
+ *     virtually every currency; used for anything ECB does not publish.
  */
 
 type RateMap = Map<string, number>;
 
 const cache = new Map<string, RateMap>();
 
+async function fetchJson(url: string): Promise<unknown | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (error) {
+    console.error("[fx] request failed", url, error);
+    return null;
+  }
+}
+
 async function loadRatesForDate(date: string): Promise<RateMap> {
   const cached = cache.get(date);
   if (cached) return cached;
 
+  // units of <currency> per 1 USD
   const map: RateMap = new Map([["USD", 1]]);
-  try {
-    const res = await fetch(`https://api.frankfurter.dev/v1/${date}?base=USD`);
-    if (res.ok) {
-      const body = (await res.json()) as { rates?: Record<string, number> };
-      for (const [cur, rate] of Object.entries(body.rates ?? {})) {
-        if (rate > 0) map.set(cur.toUpperCase(), rate);
-      }
-    }
-  } catch (error) {
-    console.error("[fx] rate lookup failed", date, error);
+
+  const ecb = (await fetchJson(`https://api.frankfurter.dev/v1/${date}?base=USD`)) as
+    | { rates?: Record<string, number> }
+    | null;
+  for (const [cur, rate] of Object.entries(ecb?.rates ?? {})) {
+    if (rate > 0) map.set(cur.toUpperCase(), rate);
   }
+
+  const wide =
+    ((await fetchJson(
+      `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${date}/v1/currencies/usd.json`,
+    )) as { usd?: Record<string, number> } | null) ??
+    ((await fetchJson(
+      "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json",
+    )) as { usd?: Record<string, number> } | null);
+  for (const [cur, rate] of Object.entries(wide?.usd ?? {})) {
+    const code = cur.toUpperCase();
+    if (rate > 0 && !map.has(code)) map.set(code, rate);
+  }
+
   cache.set(date, map);
   return map;
 }
