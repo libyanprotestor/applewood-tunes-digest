@@ -246,7 +246,7 @@ async function processJob(jobId, uploadId) {
       artist_name: upload.artist_name,
       upc: upload.upc,
       release_date: upload.release_date,
-      genre_code: upload.genre_code || "POP-00",
+      genre_code: upload.genre_code || (upload.kind === "ringtones" ? "RINGTONES-00" : "POP-00"),
       language: upload.language || "en",
       label_name: upload.label_name || upload.sublabels?.name || PROVIDER,
       copyright_pline: upload.copyright_pline || "",
