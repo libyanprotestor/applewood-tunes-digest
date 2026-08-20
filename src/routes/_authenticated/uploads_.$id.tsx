@@ -110,8 +110,10 @@ function UploadDetail() {
     setUpc(detail.data.upload.upc ?? "");
     setReleaseDate(detail.data.upload.release_date ?? "");
     setNotes(detail.data.upload.admin_notes ?? "");
-    setGenre(detail.data.upload.genre_code ?? "");
-    setLanguage(detail.data.upload.language ?? "");
+    setGenre(
+      detail.data.upload.genre_code ?? (detail.data.upload.kind === "ringtones" ? "RINGTONES-00" : "POP-00"),
+    );
+    setLanguage(detail.data.upload.language || "en");
     setLabelName(detail.data.upload.label_name ?? "");
     setPline(detail.data.upload.copyright_pline ?? "");
     setCline(detail.data.upload.copyright_cline ?? "");
