@@ -857,6 +857,9 @@ function UploadDetail() {
               </p>
             </div>
             <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPackagesOpen((v) => !v)}>
+                {packagesOpen ? "Hide" : "Show"}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -871,14 +874,18 @@ function UploadDetail() {
               <Button
                 size="sm"
                 disabled={busy}
-                onClick={() => run("Approved", () => approveFn({ data: { jobId: activeJob.id } }))}
+                onClick={() => {
+                  setPackagesOpen(false);
+                  void run("Sent to Apple", () => approveFn({ data: { jobId: activeJob.id } }));
+                }}
               >
-                Approve & send to Apple
+                Deliver to Apple
               </Button>
             </div>
           </div>
 
-          <div className="mt-4 space-y-4">
+          <div className={packagesOpen ? "mt-4 space-y-4" : "hidden"}>
+
             {builtPackages.map((p) => {
               const manifest = (p.manifest ?? null) as { files?: string[]; folder?: string } | null;
               return (
