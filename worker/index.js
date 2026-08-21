@@ -362,8 +362,33 @@ async function ensureSession() {
   }
 }
 
+/**
+ * Removes work folders (downloads + built .itmsp packages) for jobs that are no
+ * longer waiting for approval — e.g. the admin rejected the packages, or the
+ * release was delivered. Only local disk is touched here.
+ */
+async function sweepWorkDirs() {
+  let entries = [];
+  try {
+    entries = await fs.readdir(WORK_ROOT, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith("job-")) continue;
+    const jobId = entry.name.slice(4);
+    const { data } = await supabase.from("delivery_jobs").select("state").eq("id", jobId).maybeSingle();
+    const state = data?.state;
+    if (state && ["queued", "claimed", "packaging", "uploading", "awaiting_approval"].includes(state)) continue;
+    await fs.rm(path.join(WORK_ROOT, entry.name), { recursive: true, force: true });
+    console.log(`Cleaned work folder for job ${jobId} (state ${state ?? "gone"})`);
+  }
+}
+
 async function tick() {
   await ensureSession();
+  await sweepWorkDirs();
+
   const { data, error } = await supabase.rpc("claim_delivery_job", {
     _worker_id: WORKER_ID,
     _lease_seconds: 3600,

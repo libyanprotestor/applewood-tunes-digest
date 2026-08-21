@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { getUpload, deleteUpload, deleteUploadFile } from "@/lib/uploads.functions";
+import { getUpload, deleteUpload, deleteUploadFile, uploadMediaUrls } from "@/lib/uploads.functions";
 import {
   adminEditUpload,
   applyArtistToAll,
@@ -13,13 +13,14 @@ import {
   cancelDelivery,
   approvePackages,
   rejectPackages,
-
+  finalizeDelivered,
   releaseIsrcsForUpload,
   retryDelivery,
   previewMetadata,
   saveSheet,
   setUploadStatus,
 } from "@/lib/delivery.functions";
+
 
 import { getViewer } from "@/lib/analytics.functions";
 import { formatBytes } from "@/lib/upload-client";
@@ -101,6 +102,13 @@ function UploadDetail() {
   const [cline, setCline] = useState("");
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [busy, setBusy] = useState(false);
+  // Media is fetched from storage only when the admin asks for it.
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string> | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const [packagesOpen, setPackagesOpen] = useState(true);
+
 
   useEffect(() => {
     if (!detail.data) return;
@@ -148,6 +156,8 @@ function UploadDetail() {
   const deleteFileFn = useServerFn(deleteUploadFile);
   const logsFn = useServerFn(deliveryLogs);
   const previewFn = useServerFn(previewMetadata);
+  const mediaFn = useServerFn(uploadMediaUrls);
+  const finalizeFn = useServerFn(finalizeDelivered);
 
   const [preview, setPreview] = useState<
     | null
@@ -164,6 +174,28 @@ function UploadDetail() {
       : false,
   });
 
+  const status = String(detail.data?.upload.status ?? "");
+  const isLocked = !["draft", "uploaded", "in_review", "rejected"].includes(status);
+  const delivered = status === "delivered";
+
+  // Approving a release collapses the editing sections and stops media traffic.
+  useEffect(() => {
+    if (!isLocked) return;
+    setDetailsOpen(false);
+    setSheetOpen(false);
+  }, [isLocked]);
+
+  // A delivered release adds itself to the catalog and frees its storage once.
+  const needsFinalize = delivered && !detail.data?.upload.catalog_synced_at;
+  useEffect(() => {
+    if (!needsFinalize || !isAdmin) return;
+    void finalizeFn({ data: { uploadId: id } })
+      .then(() => qc.invalidateQueries({ queryKey: ["upload", id] }))
+      .catch(() => {
+        /* the worker may have done it already */
+      });
+  }, [needsFinalize, isAdmin, id, finalizeFn, qc]);
+
   async function run(label: string, fn: () => Promise<{ ok?: boolean; message?: string }>) {
     setBusy(true);
     try {
@@ -178,15 +210,36 @@ function UploadDetail() {
     }
   }
 
+  function hideMedia() {
+    setMediaUrls(null);
+  }
+
+  async function loadMedia() {
+    setMediaLoading(true);
+    try {
+      const result = await mediaFn({ data: { uploadId: id } });
+      setMediaUrls(result.urls);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load the media links.");
+    } finally {
+      setMediaLoading(false);
+    }
+  }
+
   if (detail.isLoading) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Loading…</main>;
   if (!detail.data) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Upload not found.</main>;
 
   const { upload, files, jobs, packages } = detail.data;
-  const locked = !["draft", "uploaded", "in_review", "rejected"].includes(String(upload.status));
+  const locked = isLocked;
+  const canDeleteFiles = !locked;
+  const canDeleteUpload = ["draft", "rejected", "delivered"].includes(status);
   const builtPackages = packages.filter((p) => p.job_id === activeJob?.id);
   const artwork = files.filter((f) => f.role === "artwork");
   const audio = files.filter((f) => f.role === "audio");
   const docs = files.filter((f) => f.role !== "audio" && f.role !== "artwork");
+  const mediaShown = mediaUrls !== null;
+  const packagesReady = activeJob?.state === "awaiting_approval";
+
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -206,65 +259,88 @@ function UploadDetail() {
             <Button
               variant="outline"
               size="sm"
-              disabled={busy}
-              onClick={() => run("Marked in review", () => statusFn({ data: { uploadId: id, status: "in_review" } }))}
+              disabled={busy || mediaLoading}
+              onClick={() => (mediaShown ? hideMedia() : void loadMedia())}
             >
-              In review
+              {mediaLoading ? "Loading…" : mediaShown ? "Hide preview" : "Preview"}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                const reason = window.prompt("Why is this rejected?") ?? "";
-                if (!reason) return;
-                void run("Rejected", () => statusFn({ data: { uploadId: id, status: "rejected", reason } }));
-              }}
-            >
-              Reject
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                run("Cancelled", () => statusFn({ data: { uploadId: id, status: "cancelled" } }))
-              }
-            >
-              Cancel
-            </Button>
-            <Button
-              variant={upload.status === "ready" ? "outline" : "default"}
-              size="sm"
-              disabled={busy}
-              onClick={() => run("Approved for delivery", () => statusFn({ data: { uploadId: id, status: "ready" } }))}
-            >
-              Approve
-            </Button>
-            <Button
-              size="sm"
-              disabled={busy || upload.status !== "ready"}
-              title={upload.status !== "ready" ? "Approve the release first" : undefined}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  const result = await previewFn({ data: { uploadId: id } });
-                  setPreview(result);
-                  setTimeout(
-                    () => document.getElementById("metadata-preview")?.scrollIntoView({ behavior: "smooth" }),
-                    50,
-                  );
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Could not build the metadata preview.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Package &amp; deliver
-            </Button>
+            {!delivered && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    run("Marked in review", () => statusFn({ data: { uploadId: id, status: "in_review" } }))
+                  }
+                >
+                  In review
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    const reason = window.prompt("Why is this rejected?") ?? "";
+                    if (!reason) return;
+                    hideMedia();
+                    void run("Rejected", () => statusFn({ data: { uploadId: id, status: "rejected", reason } }));
+                  }}
+                >
+                  Reject
+                </Button>
+                <Button
+                  variant={upload.status === "ready" ? "outline" : "default"}
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    hideMedia();
+                    void run("Approved for delivery", () =>
+                      statusFn({ data: { uploadId: id, status: "ready" } }),
+                    );
+                  }}
+                >
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || upload.status !== "ready"}
+                  title={upload.status !== "ready" ? "Approve the release first" : undefined}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const result = await previewFn({ data: { uploadId: id } });
+                      setPreview(result);
+                      setTimeout(
+                        () => document.getElementById("metadata-preview")?.scrollIntoView({ behavior: "smooth" }),
+                        50,
+                      );
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Could not build the metadata preview.");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Package
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={busy || !packagesReady}
+                  title={packagesReady ? undefined : "Package the release first, then review the packages"}
+                  onClick={() => {
+                    setPackagesOpen(false);
+                    void run("Sent to Apple", () => approveFn({ data: { jobId: activeJob!.id } }));
+                  }}
+                >
+                  Deliver
+                </Button>
+              </>
+            )}
           </div>
         )}
+
       </div>
 
       {isAdmin && upload.status !== "ready" && (
@@ -291,93 +367,125 @@ function UploadDetail() {
         </p>
       )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="text-sm font-semibold">Artwork</h2>
-          {artwork.length === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">No artwork uploaded.</p>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              {artwork.map((f) => (
-                <div key={f.id}>
-                  <a href={f.url} target="_blank" rel="noreferrer">
-                    <img
-                      src={f.url}
-                      alt={f.filename}
-                      loading="lazy"
-                      className="aspect-square w-full rounded-lg border border-border object-cover"
-                    />
-                    <span className="mt-1 block truncate text-xs text-muted-foreground">{f.filename}</span>
-                  </a>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="mt-1 text-xs text-destructive hover:underline"
-                      onClick={() => {
-                        if (!window.confirm(`Delete ${f.filename}?`)) return;
-                        void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+      <section className="mt-8 rounded-2xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">
+            Audio ({audio.length}) · Artwork ({artwork.length})
+          </h2>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || mediaLoading}
+              onClick={() => (mediaShown ? hideMedia() : void loadMedia())}
+            >
+              {mediaLoading ? "Loading…" : mediaShown ? "Hide preview" : "Preview"}
+            </Button>
           )}
-          {docs.length > 0 && (
-            <>
-              <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Other files
-              </h3>
-              <ul className="mt-2 space-y-1 text-xs">
-                {docs.map((f) => (
-                  <li key={f.id}>
-                    <a href={f.url} target="_blank" rel="noreferrer" className="hover:underline">
-                      {f.filename}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
+        </div>
 
-        <section className="rounded-2xl border border-border bg-card p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold">Audio ({audio.length})</h2>
-          <ul className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
-            {audio.map((f) => (
-              <li key={f.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-xs">
-                    {f.filename} · {formatBytes(Number(f.bytes ?? 0))}
-                  </p>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="shrink-0 text-xs text-destructive hover:underline"
-                      onClick={() => {
-                        if (!window.confirm(`Delete ${f.filename}?`)) return;
-                        void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
+        {!mediaShown ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Media is not loaded. Press <strong>Preview</strong> to stream the audio and show the artwork.
+          </p>
+        ) : (
+          <>
+            <ul className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
+              {audio.map((f) => (
+                <li key={f.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-xs">
+                      {f.filename} · {formatBytes(Number(f.bytes ?? 0))}
+                    </p>
+                    {isAdmin && canDeleteFiles && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="shrink-0 text-xs text-destructive hover:underline"
+                        onClick={() => {
+                          if (!window.confirm(`Delete ${f.filename}?`)) return;
+                          void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                  <audio controls preload="none" src={mediaUrls?.[f.id]} className="mt-1 w-full" />
+                </li>
+              ))}
+              {audio.length === 0 && <li className="text-sm text-muted-foreground">No audio files.</li>}
+            </ul>
+
+            <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Artwork</h3>
+            {artwork.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">No artwork uploaded.</p>
+            ) : (
+              // Two rows of four tiles are visible; the rest scrolls.
+              <div className="mt-2 max-h-[26rem] overflow-y-auto rounded-xl border border-border p-3">
+                <div className="grid grid-cols-4 gap-3">
+                  {artwork.map((f) => (
+                    <div key={f.id}>
+                      <a href={mediaUrls?.[f.id]} target="_blank" rel="noreferrer">
+                        <img
+                          src={mediaUrls?.[f.id]}
+                          alt={f.filename}
+                          loading="lazy"
+                          className="aspect-square w-full rounded-lg border border-border object-cover"
+                        />
+                        <span className="mt-1 block truncate text-xs text-muted-foreground">{f.filename}</span>
+                      </a>
+                      {isAdmin && canDeleteFiles && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="text-xs text-destructive hover:underline"
+                          onClick={() => {
+                            if (!window.confirm(`Delete ${f.filename}?`)) return;
+                            void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <audio controls preload="none" src={f.url} className="mt-1 w-full" />
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+              </div>
+            )}
+
+            {docs.length > 0 && (
+              <>
+                <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Other files
+                </h3>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {docs.map((f) => (
+                    <li key={f.id}>
+                      <a href={mediaUrls?.[f.id]} target="_blank" rel="noreferrer" className="hover:underline">
+                        {f.filename}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+      </section>
+
 
       {isAdmin && (
-        <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
-          <h2 className="text-sm font-semibold">Release details</h2>
+        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">Release details</h2>
+            <Button variant="ghost" size="sm" onClick={() => setDetailsOpen((v) => !v)}>
+              {detailsOpen ? "Hide" : "Show"}
+            </Button>
+          </div>
+          <fieldset disabled={locked} className={detailsOpen ? "disabled:opacity-70" : "hidden"}>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
+
             <div>
               <Label className="text-xs">Title</Label>
               <Input className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -442,35 +550,16 @@ function UploadDetail() {
               </Button>
             </div>
           </div>
-        </fieldset>
+          </fieldset>
+        </section>
       )}
 
 
       {isAdmin && (
-        <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">Metadata sheet</h2>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy || !artist.trim()}
-                onClick={() =>
-                  run("Artist applied to every row", () =>
-                    artistFn({ data: { uploadId: id, artistName: artist.trim() } }),
-                  )
-                }
-              >
-                Apply artist to all
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => run("Codes assigned", () => assignFn({ data: { uploadId: id } }))}
-              >
-                Fill ISRCs
-              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -497,8 +586,38 @@ function UploadDetail() {
               >
                 Download sheet
               </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSheetOpen((v) => !v)}>
+                {sheetOpen ? "Hide" : "Show"}
+              </Button>
+            </div>
+          </div>
+          <fieldset disabled={locked} className={sheetOpen ? "disabled:opacity-70" : "hidden"}>
+          <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || !artist.trim()}
+                onClick={() =>
+                  run("Artist applied to every row", () =>
+                    artistFn({ data: { uploadId: id, artistName: artist.trim() } }),
+                  )
+                }
+              >
+                Apply artist to all
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => run("Codes assigned", () => assignFn({ data: { uploadId: id } }))}
+              >
+                Fill ISRCs
+              </Button>
               <Button
                 variant="ghost"
+
                 size="sm"
                 disabled={busy}
                 onClick={() => run("ISRCs returned to the pool", () => releaseFn({ data: { uploadId: id } }))}
@@ -651,19 +770,25 @@ function UploadDetail() {
             >
               Save sheet
             </Button>
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                if (!window.confirm("Delete this upload and its files permanently?")) return;
-                void run("Upload deleted", () => deleteFn({ data: { id } }));
-              }}
-            >
-              Delete upload
-            </Button>
           </div>
-        </fieldset>
+          </fieldset>
+          {canDeleteUpload && (
+            <div className="mt-4">
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  if (!window.confirm("Delete this upload and its files permanently?")) return;
+                  void run("Upload deleted", () => deleteFn({ data: { id } }));
+                }}
+              >
+                Delete upload
+              </Button>
+            </div>
+          )}
+        </section>
       )}
+
 
       {preview && (
         <section id="metadata-preview" className="mt-8 rounded-2xl border border-border bg-card p-6">
@@ -685,15 +810,16 @@ function UploadDetail() {
                 disabled={busy || preview.warnings.length > 0}
                 title={preview.warnings.length > 0 ? "Fix the warnings first" : undefined}
                 onClick={() =>
-                  run("Queued for packaging and delivery", async () => {
+                  run("Queued for packaging", async () => {
                     const result = await queueFn({ data: { uploadId: id } });
                     if (result.ok !== false) setPreview(null);
                     return result;
                   })
                 }
               >
-                Deliver to Apple
+                Start packaging
               </Button>
+
             </div>
           </div>
 
@@ -731,6 +857,9 @@ function UploadDetail() {
               </p>
             </div>
             <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPackagesOpen((v) => !v)}>
+                {packagesOpen ? "Hide" : "Show"}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -745,14 +874,18 @@ function UploadDetail() {
               <Button
                 size="sm"
                 disabled={busy}
-                onClick={() => run("Approved", () => approveFn({ data: { jobId: activeJob.id } }))}
+                onClick={() => {
+                  setPackagesOpen(false);
+                  void run("Sent to Apple", () => approveFn({ data: { jobId: activeJob.id } }));
+                }}
               >
-                Approve & send to Apple
+                Deliver to Apple
               </Button>
             </div>
           </div>
 
-          <div className="mt-4 space-y-4">
+          <div className={packagesOpen ? "mt-4 space-y-4" : "hidden"}>
+
             {builtPackages.map((p) => {
               const manifest = (p.manifest ?? null) as { files?: string[]; folder?: string } | null;
               return (

@@ -662,3 +662,106 @@ export const previewMetadata = createServerFn({ method: "POST" })
 
     return { total: packages.length, packages: packages.slice(0, 5), warnings: warnings.slice(0, 20) };
   });
+
+/**
+ * Runs once after Apple accepted a release: adds the delivered items to the
+ * sublabel catalogue and frees the original files from object storage.
+ * Safe to call again — the catalog stamp makes it a no-op.
+ */
+export const finalizeDelivered = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ uploadId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: upload, error: upErr } = await context.supabase
+      .from("uploads")
+      .select("id, kind, title, artist_name, upc, status, sublabel_id, catalog_synced_at")
+      .eq("id", data.uploadId)
+      .maybeSingle();
+    if (upErr) throw new Error(upErr.message);
+    if (!upload) throw new Error("Upload not found");
+    if (upload.status !== "delivered")
+      return { ok: false as const, message: "This release has not been delivered yet." };
+    if (upload.catalog_synced_at) return { ok: true as const, message: "Already added to the catalog." };
+
+    const { data: tracks } = await context.supabase
+      .from("upload_tracks")
+      .select("id, title, version, artist_name, isrc, track_number")
+      .eq("upload_id", data.uploadId)
+      .order("track_number");
+
+    type NewItem = {
+      sublabel_id: string;
+      title: string;
+      artist_name: string | null;
+      isrc: string | null;
+      upc: string | null;
+      item_type: "album" | "album_song" | "single" | "ringtone";
+    };
+    const rows: NewItem[] = [];
+    if (upload.kind === "album" && upload.upc) {
+      rows.push({
+        sublabel_id: upload.sublabel_id,
+        title: upload.title,
+        artist_name: upload.artist_name ?? null,
+        isrc: upload.upc,
+        upc: upload.upc,
+        item_type: "album",
+      });
+    }
+    const trackType = upload.kind === "album" ? "album_song" : upload.kind === "ringtones" ? "ringtone" : "single";
+    for (const t of tracks ?? []) {
+      if (!t.isrc) continue;
+      rows.push({
+        sublabel_id: upload.sublabel_id,
+        title: t.version ? `${t.title} (${t.version})` : t.title,
+        artist_name: t.artist_name ?? upload.artist_name ?? null,
+        isrc: t.isrc,
+        upc: upload.kind === "album" ? (upload.upc ?? null) : null,
+        item_type: trackType,
+      });
+    }
+
+    let added = 0;
+    if (rows.length) {
+      const codes = rows.map((r) => r.isrc!).filter(Boolean);
+      const { data: existing } = await context.supabase.from("items").select("isrc").in("isrc", codes);
+      const taken = new Set((existing ?? []).map((i) => (i.isrc ?? "").toUpperCase()));
+      const fresh = rows.filter((r) => !taken.has((r.isrc ?? "").toUpperCase()));
+      if (fresh.length) {
+        const { error } = await context.supabase.from("items").insert(fresh);
+        if (error) throw new Error(error.message);
+        added = fresh.length;
+      }
+    }
+
+    // Free the source files: Apple has the package, storage no longer needs them.
+    const b2 = await import("./b2.server");
+    const { data: files } = await context.supabase
+      .from("upload_files")
+      .select("id, storage_key")
+      .eq("upload_id", data.uploadId);
+    for (const f of files ?? []) {
+      try {
+        await b2.deleteObject(f.storage_key);
+      } catch {
+        /* already gone */
+      }
+    }
+    if ((files ?? []).length) {
+      await context.supabase.from("upload_tracks").update({ file_id: null, artwork_file_id: null }).eq("upload_id", data.uploadId);
+      await context.supabase.from("upload_files").delete().eq("upload_id", data.uploadId);
+    }
+
+    await context.supabase
+      .from("uploads")
+      .update({ catalog_synced_at: new Date().toISOString(), file_count: 0, total_bytes: 0 })
+      .eq("id", data.uploadId);
+
+    return {
+      ok: true as const,
+      message: `${added} catalog item${added === 1 ? "" : "s"} added; source files removed from storage.`,
+    };
+  });
