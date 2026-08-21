@@ -102,6 +102,13 @@ function UploadDetail() {
   const [cline, setCline] = useState("");
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [busy, setBusy] = useState(false);
+  // Media is fetched from storage only when the admin asks for it.
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string> | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const [packagesOpen, setPackagesOpen] = useState(true);
+
 
   useEffect(() => {
     if (!detail.data) return;
