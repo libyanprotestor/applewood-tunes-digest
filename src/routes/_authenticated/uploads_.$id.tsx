@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { getUpload, deleteUpload, deleteUploadFile } from "@/lib/uploads.functions";
+import { getUpload, deleteUpload, deleteUploadFile, uploadMediaUrls } from "@/lib/uploads.functions";
 import {
   adminEditUpload,
   applyArtistToAll,
@@ -13,13 +13,14 @@ import {
   cancelDelivery,
   approvePackages,
   rejectPackages,
-
+  finalizeDelivered,
   releaseIsrcsForUpload,
   retryDelivery,
   previewMetadata,
   saveSheet,
   setUploadStatus,
 } from "@/lib/delivery.functions";
+
 
 import { getViewer } from "@/lib/analytics.functions";
 import { formatBytes } from "@/lib/upload-client";
