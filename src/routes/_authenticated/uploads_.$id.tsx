@@ -770,19 +770,25 @@ function UploadDetail() {
             >
               Save sheet
             </Button>
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                if (!window.confirm("Delete this upload and its files permanently?")) return;
-                void run("Upload deleted", () => deleteFn({ data: { id } }));
-              }}
-            >
-              Delete upload
-            </Button>
           </div>
-        </fieldset>
+          </fieldset>
+          {canDeleteUpload && (
+            <div className="mt-4">
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  if (!window.confirm("Delete this upload and its files permanently?")) return;
+                  void run("Upload deleted", () => deleteFn({ data: { id } }));
+                }}
+              >
+                Delete upload
+              </Button>
+            </div>
+          )}
+        </section>
       )}
+
 
       {preview && (
         <section id="metadata-preview" className="mt-8 rounded-2xl border border-border bg-card p-6">
