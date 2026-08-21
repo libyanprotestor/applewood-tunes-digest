@@ -367,88 +367,113 @@ function UploadDetail() {
         </p>
       )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="text-sm font-semibold">Artwork</h2>
-          {artwork.length === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">No artwork uploaded.</p>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              {artwork.map((f) => (
-                <div key={f.id}>
-                  <a href={f.url} target="_blank" rel="noreferrer">
-                    <img
-                      src={f.url}
-                      alt={f.filename}
-                      loading="lazy"
-                      className="aspect-square w-full rounded-lg border border-border object-cover"
-                    />
-                    <span className="mt-1 block truncate text-xs text-muted-foreground">{f.filename}</span>
-                  </a>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="mt-1 text-xs text-destructive hover:underline"
-                      onClick={() => {
-                        if (!window.confirm(`Delete ${f.filename}?`)) return;
-                        void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+      <section className="mt-8 rounded-2xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">
+            Audio ({audio.length}) · Artwork ({artwork.length})
+          </h2>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || mediaLoading}
+              onClick={() => (mediaShown ? hideMedia() : void loadMedia())}
+            >
+              {mediaLoading ? "Loading…" : mediaShown ? "Hide preview" : "Preview"}
+            </Button>
           )}
-          {docs.length > 0 && (
-            <>
-              <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Other files
-              </h3>
-              <ul className="mt-2 space-y-1 text-xs">
-                {docs.map((f) => (
-                  <li key={f.id}>
-                    <a href={f.url} target="_blank" rel="noreferrer" className="hover:underline">
-                      {f.filename}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
+        </div>
 
-        <section className="rounded-2xl border border-border bg-card p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold">Audio ({audio.length})</h2>
-          <ul className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
-            {audio.map((f) => (
-              <li key={f.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-xs">
-                    {f.filename} · {formatBytes(Number(f.bytes ?? 0))}
-                  </p>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="shrink-0 text-xs text-destructive hover:underline"
-                      onClick={() => {
-                        if (!window.confirm(`Delete ${f.filename}?`)) return;
-                        void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
+        {!mediaShown ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Media is not loaded. Press <strong>Preview</strong> to stream the audio and show the artwork.
+          </p>
+        ) : (
+          <>
+            <ul className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
+              {audio.map((f) => (
+                <li key={f.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-xs">
+                      {f.filename} · {formatBytes(Number(f.bytes ?? 0))}
+                    </p>
+                    {isAdmin && canDeleteFiles && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="shrink-0 text-xs text-destructive hover:underline"
+                        onClick={() => {
+                          if (!window.confirm(`Delete ${f.filename}?`)) return;
+                          void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                  <audio controls preload="none" src={mediaUrls?.[f.id]} className="mt-1 w-full" />
+                </li>
+              ))}
+              {audio.length === 0 && <li className="text-sm text-muted-foreground">No audio files.</li>}
+            </ul>
+
+            <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Artwork</h3>
+            {artwork.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">No artwork uploaded.</p>
+            ) : (
+              // Two rows of four tiles are visible; the rest scrolls.
+              <div className="mt-2 max-h-[26rem] overflow-y-auto rounded-xl border border-border p-3">
+                <div className="grid grid-cols-4 gap-3">
+                  {artwork.map((f) => (
+                    <div key={f.id}>
+                      <a href={mediaUrls?.[f.id]} target="_blank" rel="noreferrer">
+                        <img
+                          src={mediaUrls?.[f.id]}
+                          alt={f.filename}
+                          loading="lazy"
+                          className="aspect-square w-full rounded-lg border border-border object-cover"
+                        />
+                        <span className="mt-1 block truncate text-xs text-muted-foreground">{f.filename}</span>
+                      </a>
+                      {isAdmin && canDeleteFiles && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="text-xs text-destructive hover:underline"
+                          onClick={() => {
+                            if (!window.confirm(`Delete ${f.filename}?`)) return;
+                            void run("File deleted", () => deleteFileFn({ data: { uploadId: id, fileId: f.id } }));
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <audio controls preload="none" src={f.url} className="mt-1 w-full" />
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+              </div>
+            )}
+
+            {docs.length > 0 && (
+              <>
+                <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Other files
+                </h3>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {docs.map((f) => (
+                    <li key={f.id}>
+                      <a href={mediaUrls?.[f.id]} target="_blank" rel="noreferrer" className="hover:underline">
+                        {f.filename}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+      </section>
+
 
       {isAdmin && (
         <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
