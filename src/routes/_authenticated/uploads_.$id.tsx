@@ -616,8 +616,8 @@ function UploadDetail() {
                 Fill ISRCs
               </Button>
               <Button
-
                 variant="ghost"
+
                 size="sm"
                 disabled={busy}
                 onClick={() => run("ISRCs returned to the pool", () => releaseFn({ data: { uploadId: id } }))}
