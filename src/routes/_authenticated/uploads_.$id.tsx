@@ -616,32 +616,7 @@ function UploadDetail() {
                 Fill ISRCs
               </Button>
               <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const csv = toCsv([
-                    ["Folder", "Track", "Title", "Version", "Artist", "ISRC", "Explicit"],
-                    ...tracks.map((t) => [
-                      t.folderNumber ? String(t.folderNumber) : "",
-                      String(t.trackNumber),
-                      t.title,
-                      t.version,
-                      t.artistName || artist,
-                      t.isrc,
-                      t.explicit ? "yes" : "no",
-                    ]),
-                  ]);
-                  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `${title || "release"}-sheet.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-              >
-                Download sheet
-              </Button>
-              <Button
+
                 variant="ghost"
                 size="sm"
                 disabled={busy}
