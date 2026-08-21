@@ -476,9 +476,16 @@ function UploadDetail() {
 
 
       {isAdmin && (
-        <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
-          <h2 className="text-sm font-semibold">Release details</h2>
+        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">Release details</h2>
+            <Button variant="ghost" size="sm" onClick={() => setDetailsOpen((v) => !v)}>
+              {detailsOpen ? "Hide" : "Show"}
+            </Button>
+          </div>
+          <fieldset disabled={locked} className={detailsOpen ? "disabled:opacity-70" : "hidden"}>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
+
             <div>
               <Label className="text-xs">Title</Label>
               <Input className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} />
