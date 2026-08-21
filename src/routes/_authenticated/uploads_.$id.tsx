@@ -156,6 +156,8 @@ function UploadDetail() {
   const deleteFileFn = useServerFn(deleteUploadFile);
   const logsFn = useServerFn(deliveryLogs);
   const previewFn = useServerFn(previewMetadata);
+  const mediaFn = useServerFn(uploadMediaUrls);
+  const finalizeFn = useServerFn(finalizeDelivered);
 
   const [preview, setPreview] = useState<
     | null
@@ -172,6 +174,28 @@ function UploadDetail() {
       : false,
   });
 
+  const status = String(detail.data?.upload.status ?? "");
+  const isLocked = !["draft", "uploaded", "in_review", "rejected"].includes(status);
+  const delivered = status === "delivered";
+
+  // Approving a release collapses the editing sections and stops media traffic.
+  useEffect(() => {
+    if (!isLocked) return;
+    setDetailsOpen(false);
+    setSheetOpen(false);
+  }, [isLocked]);
+
+  // A delivered release adds itself to the catalog and frees its storage once.
+  const needsFinalize = delivered && !detail.data?.upload.catalog_synced_at;
+  useEffect(() => {
+    if (!needsFinalize || !isAdmin) return;
+    void finalizeFn({ data: { uploadId: id } })
+      .then(() => qc.invalidateQueries({ queryKey: ["upload", id] }))
+      .catch(() => {
+        /* the worker may have done it already */
+      });
+  }, [needsFinalize, isAdmin, id, finalizeFn, qc]);
+
   async function run(label: string, fn: () => Promise<{ ok?: boolean; message?: string }>) {
     setBusy(true);
     try {
@@ -186,15 +210,36 @@ function UploadDetail() {
     }
   }
 
+  function hideMedia() {
+    setMediaUrls(null);
+  }
+
+  async function loadMedia() {
+    setMediaLoading(true);
+    try {
+      const result = await mediaFn({ data: { uploadId: id } });
+      setMediaUrls(result.urls);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load the media links.");
+    } finally {
+      setMediaLoading(false);
+    }
+  }
+
   if (detail.isLoading) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Loading…</main>;
   if (!detail.data) return <main className="mx-auto max-w-6xl px-6 py-10 text-sm">Upload not found.</main>;
 
   const { upload, files, jobs, packages } = detail.data;
-  const locked = !["draft", "uploaded", "in_review", "rejected"].includes(String(upload.status));
+  const locked = isLocked;
+  const canDeleteFiles = !locked;
+  const canDeleteUpload = ["draft", "rejected", "delivered"].includes(status);
   const builtPackages = packages.filter((p) => p.job_id === activeJob?.id);
   const artwork = files.filter((f) => f.role === "artwork");
   const audio = files.filter((f) => f.role === "audio");
   const docs = files.filter((f) => f.role !== "audio" && f.role !== "artwork");
+  const mediaShown = mediaUrls !== null;
+  const packagesReady = activeJob?.state === "awaiting_approval";
+
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
