@@ -259,65 +259,88 @@ function UploadDetail() {
             <Button
               variant="outline"
               size="sm"
-              disabled={busy}
-              onClick={() => run("Marked in review", () => statusFn({ data: { uploadId: id, status: "in_review" } }))}
+              disabled={busy || mediaLoading}
+              onClick={() => (mediaShown ? hideMedia() : void loadMedia())}
             >
-              In review
+              {mediaLoading ? "Loading…" : mediaShown ? "Hide preview" : "Preview"}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                const reason = window.prompt("Why is this rejected?") ?? "";
-                if (!reason) return;
-                void run("Rejected", () => statusFn({ data: { uploadId: id, status: "rejected", reason } }));
-              }}
-            >
-              Reject
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                run("Cancelled", () => statusFn({ data: { uploadId: id, status: "cancelled" } }))
-              }
-            >
-              Cancel
-            </Button>
-            <Button
-              variant={upload.status === "ready" ? "outline" : "default"}
-              size="sm"
-              disabled={busy}
-              onClick={() => run("Approved for delivery", () => statusFn({ data: { uploadId: id, status: "ready" } }))}
-            >
-              Approve
-            </Button>
-            <Button
-              size="sm"
-              disabled={busy || upload.status !== "ready"}
-              title={upload.status !== "ready" ? "Approve the release first" : undefined}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  const result = await previewFn({ data: { uploadId: id } });
-                  setPreview(result);
-                  setTimeout(
-                    () => document.getElementById("metadata-preview")?.scrollIntoView({ behavior: "smooth" }),
-                    50,
-                  );
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Could not build the metadata preview.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Package &amp; deliver
-            </Button>
+            {!delivered && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    run("Marked in review", () => statusFn({ data: { uploadId: id, status: "in_review" } }))
+                  }
+                >
+                  In review
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    const reason = window.prompt("Why is this rejected?") ?? "";
+                    if (!reason) return;
+                    hideMedia();
+                    void run("Rejected", () => statusFn({ data: { uploadId: id, status: "rejected", reason } }));
+                  }}
+                >
+                  Reject
+                </Button>
+                <Button
+                  variant={upload.status === "ready" ? "outline" : "default"}
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    hideMedia();
+                    void run("Approved for delivery", () =>
+                      statusFn({ data: { uploadId: id, status: "ready" } }),
+                    );
+                  }}
+                >
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || upload.status !== "ready"}
+                  title={upload.status !== "ready" ? "Approve the release first" : undefined}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const result = await previewFn({ data: { uploadId: id } });
+                      setPreview(result);
+                      setTimeout(
+                        () => document.getElementById("metadata-preview")?.scrollIntoView({ behavior: "smooth" }),
+                        50,
+                      );
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Could not build the metadata preview.");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Package
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={busy || !packagesReady}
+                  title={packagesReady ? undefined : "Package the release first, then review the packages"}
+                  onClick={() => {
+                    setPackagesOpen(false);
+                    void run("Sent to Apple", () => approveFn({ data: { jobId: activeJob!.id } }));
+                  }}
+                >
+                  Deliver
+                </Button>
+              </>
+            )}
           </div>
         )}
+
       </div>
 
       {isAdmin && upload.status !== "ready" && (
