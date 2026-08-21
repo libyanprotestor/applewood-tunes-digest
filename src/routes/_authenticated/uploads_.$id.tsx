@@ -550,14 +550,50 @@ function UploadDetail() {
               </Button>
             </div>
           </div>
-        </fieldset>
+          </fieldset>
+        </section>
       )}
 
 
       {isAdmin && (
-        <fieldset disabled={locked} className="mt-8 rounded-2xl border border-border bg-card p-6 disabled:opacity-70">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+        <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">Metadata sheet</h2>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const csv = toCsv([
+                    ["Folder", "Track", "Title", "Version", "Artist", "ISRC", "Explicit"],
+                    ...tracks.map((t) => [
+                      t.folderNumber ? String(t.folderNumber) : "",
+                      String(t.trackNumber),
+                      t.title,
+                      t.version,
+                      t.artistName || artist,
+                      t.isrc,
+                      t.explicit ? "yes" : "no",
+                    ]),
+                  ]);
+                  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `${title || "release"}-sheet.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                Download sheet
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSheetOpen((v) => !v)}>
+                {sheetOpen ? "Hide" : "Show"}
+              </Button>
+            </div>
+          </div>
+          <fieldset disabled={locked} className={sheetOpen ? "disabled:opacity-70" : "hidden"}>
+          <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
