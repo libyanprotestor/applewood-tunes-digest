@@ -434,6 +434,18 @@ export const deleteUploadFile = createServerFn({ method: "POST" })
     await assertAdmin(context.supabase, context.userId);
     const b2 = await import("./b2.server");
 
+    const { data: parent } = await context.supabase
+      .from("uploads")
+      .select("status")
+      .eq("id", data.uploadId)
+      .maybeSingle();
+    if (!parent) return { ok: false as const, message: "Upload not found." };
+    if (!["draft", "uploaded", "in_review", "rejected"].includes(String(parent.status)))
+      return {
+        ok: false as const,
+        message: "This release is approved — press In review before removing files.",
+      };
+
     const { data: file } = await context.supabase
       .from("upload_files")
       .select("storage_key")
@@ -441,6 +453,7 @@ export const deleteUploadFile = createServerFn({ method: "POST" })
       .eq("upload_id", data.uploadId)
       .maybeSingle();
     if (!file) return { ok: false as const, message: "That file is already gone." };
+
 
     try {
       await b2.deleteObject(file.storage_key);
