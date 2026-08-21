@@ -317,11 +317,10 @@ export const getUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
-    const b2 = await import("./b2.server");
     const { data: upload, error } = await context.supabase
       .from("uploads")
       .select(
-        "id, kind, title, artist_name, upc, release_date, status, total_bytes, file_count, admin_notes, rejection_reason, extract_error, genre_code, language, label_name, copyright_pline, copyright_cline, created_at, sublabel_id, sublabels(name)",
+        "id, kind, title, artist_name, upc, release_date, status, total_bytes, file_count, admin_notes, rejection_reason, extract_error, genre_code, language, label_name, copyright_pline, copyright_cline, created_at, catalog_synced_at, sublabel_id, sublabels(name)",
       )
       .eq("id", data.id)
       .maybeSingle();
@@ -351,19 +350,34 @@ export const getUpload = createServerFn({ method: "POST" })
         .order("vendor_id"),
     ]);
 
-    const withUrls = await Promise.all(
-      (files ?? []).map(async (f) => ({ ...f, url: await b2.previewUrl(f.storage_key) })),
-    );
-
+    // Presigned media links are minted only on demand (see uploadMediaUrls) so
+    // simply opening this page never pulls audio or artwork from storage.
     return {
       upload,
-      files: withUrls,
+      files: files ?? [],
       tracks: tracks ?? [],
       jobs: jobs ?? [],
       packages: packages ?? [],
     };
-
   });
+
+/** Short-lived preview links for the audio and artwork of one upload. */
+export const uploadMediaUrls = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ uploadId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const b2 = await import("./b2.server");
+    const { data: files, error } = await context.supabase
+      .from("upload_files")
+      .select("id, storage_key")
+      .eq("upload_id", data.uploadId);
+    if (error) throw new Error(error.message);
+    const entries = await Promise.all(
+      (files ?? []).map(async (f) => [f.id, await b2.previewUrl(f.storage_key)] as const),
+    );
+    return { urls: Object.fromEntries(entries) as Record<string, string> };
+  });
+
 
 export const deleteUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
