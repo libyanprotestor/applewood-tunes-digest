@@ -387,10 +387,23 @@ export const deleteUpload = createServerFn({ method: "POST" })
     await assertAdmin(context.supabase, context.userId);
     const b2 = await import("./b2.server");
 
+    const { data: row } = await context.supabase
+      .from("uploads")
+      .select("status")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!row) return { ok: false as const, message: "That upload is already gone." };
+    if (!["draft", "rejected", "delivered"].includes(String(row.status)))
+      return {
+        ok: false as const,
+        message: "Only draft, rejected or delivered releases can be deleted.",
+      };
+
     const { data: files } = await context.supabase
       .from("upload_files")
       .select("storage_key")
       .eq("upload_id", data.id);
+
     for (const f of files ?? []) {
       try {
         await b2.deleteObject(f.storage_key);
