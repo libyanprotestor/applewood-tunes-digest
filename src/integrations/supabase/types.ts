@@ -810,6 +810,7 @@ export type Database = {
         Row: {
           admin_notes: string | null
           artist_name: string | null
+          catalog_synced_at: string | null
           copyright_cline: string | null
           copyright_pline: string | null
           created_at: string
@@ -834,6 +835,7 @@ export type Database = {
         Insert: {
           admin_notes?: string | null
           artist_name?: string | null
+          catalog_synced_at?: string | null
           copyright_cline?: string | null
           copyright_pline?: string | null
           created_at?: string
@@ -858,6 +860,7 @@ export type Database = {
         Update: {
           admin_notes?: string | null
           artist_name?: string | null
+          catalog_synced_at?: string | null
           copyright_cline?: string | null
           copyright_pline?: string | null
           created_at?: string
@@ -967,7 +970,7 @@ export type Database = {
         | "succeeded"
         | "failed"
         | "awaiting_approval"
-      item_type: "ringtone" | "single" | "album" | "other"
+      item_type: "ringtone" | "single" | "album" | "other" | "album_song"
       run_status: "pending" | "success" | "not_ready" | "failed"
       upload_file_role: "audio" | "artwork" | "document" | "other"
       upload_kind: "album" | "singles" | "ringtones"
@@ -1119,7 +1122,7 @@ export const Constants = {
         "failed",
         "awaiting_approval",
       ],
-      item_type: ["ringtone", "single", "album", "other"],
+      item_type: ["ringtone", "single", "album", "other", "album_song"],
       run_status: ["pending", "success", "not_ready", "failed"],
       upload_file_role: ["audio", "artwork", "document", "other"],
       upload_kind: ["album", "singles", "ringtones"],
