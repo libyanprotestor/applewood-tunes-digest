@@ -810,15 +810,16 @@ function UploadDetail() {
                 disabled={busy || preview.warnings.length > 0}
                 title={preview.warnings.length > 0 ? "Fix the warnings first" : undefined}
                 onClick={() =>
-                  run("Queued for packaging and delivery", async () => {
+                  run("Queued for packaging", async () => {
                     const result = await queueFn({ data: { uploadId: id } });
                     if (result.ok !== false) setPreview(null);
                     return result;
                   })
                 }
               >
-                Deliver to Apple
+                Start packaging
               </Button>
+
             </div>
           </div>
 
