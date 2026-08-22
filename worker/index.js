@@ -263,13 +263,14 @@ async function processJob(jobId, uploadId) {
     const downloaded = new Set();
     const fetchOnce = async (file) => {
       if (!downloaded.has(file.filename)) {
-        await log(jobId, `Downloading ${file.filename}`);
+        console.log(`[${jobId}] downloading ${file.filename}`);
         await download(file.storage_key, path.join(workDir, file.filename));
         downloaded.add(file.filename);
       }
       return file.filename;
     };
 
+    await log(jobId, `Downloading assets for ${tracks.length} track(s).`);
     for (const track of tracks) {
       const audio = byId.get(track.file_id);
       if (!audio) throw new Error(`Track "${track.title}" has no audio file.`);
@@ -279,6 +280,7 @@ async function processJob(jobId, uploadId) {
       artworkNames.push(art ? await fetchOnce(art) : null);
       await renewLease(jobId);
     }
+    await log(jobId, `${downloaded.size} file(s) downloaded.`);
 
     const release = {
       kind: upload.kind,
