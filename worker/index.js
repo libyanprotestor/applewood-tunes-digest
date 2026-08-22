@@ -197,11 +197,9 @@ function run(command, args, tag = "") {
 }
 
 async function isApproved(jobId) {
-  const { data } = await supabase
-    .from("delivery_jobs")
-    .select("approved_for_delivery")
-    .eq("id", jobId)
-    .single();
+  const { data } = await db("approval read", () =>
+    supabase.from("delivery_jobs").select("approved_for_delivery").eq("id", jobId).single(),
+  );
   return Boolean(data?.approved_for_delivery);
 }
 
