@@ -110,18 +110,48 @@ const PROVIDER = env("APPLE_PROVIDER_SHORTNAME");
 const APPLE_USER = env("APPLE_TRANSPORTER_USER");
 const APPLE_PASSWORD = env("APPLE_TRANSPORTER_PASSWORD");
 
+/**
+ * Runs a Supabase call and never lets its error pass silently. Auth failures
+ * (expired/revoked token) trigger one re-sign-in and a retry, so a long job
+ * cannot keep uploading to Apple while its database writes are being dropped.
+ */
+async function db(label, op) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await op();
+    if (!result?.error) return result;
+    const message = result.error.message || String(result.error);
+    if (attempt === 0 && /jwt|token|expired|unauthor|permission denied|refresh/i.test(message)) {
+      console.error(`${label}: ${message} — signing in again and retrying`);
+      await signIn();
+      continue;
+    }
+    throw new Error(`${label} failed: ${message}`);
+  }
+  return null;
+}
+
 async function log(jobId, line, level = "info") {
   const text = String(line).slice(0, 4000);
   console.log(`[${jobId}] ${text}`);
-  await supabase.from("delivery_logs").insert({ job_id: jobId, line: text, level });
+  try {
+    await db("log insert", () => supabase.from("delivery_logs").insert({ job_id: jobId, line: text, level }));
+  } catch (error) {
+    console.error("could not persist log line:", error.message);
+  }
 }
 
 async function setJob(jobId, patch) {
-  await supabase.from("delivery_jobs").update(patch).eq("id", jobId);
+  await db("delivery_jobs update", () => supabase.from("delivery_jobs").update(patch).eq("id", jobId));
 }
 
 async function setUpload(uploadId, patch) {
-  await supabase.from("uploads").update(patch).eq("id", uploadId);
+  await db("uploads update", () => supabase.from("uploads").update(patch).eq("id", uploadId));
+}
+
+async function setPackage(jobId, vendorId, patch) {
+  await db("delivery_packages update", () =>
+    supabase.from("delivery_packages").update(patch).eq("job_id", jobId).eq("vendor_id", vendorId),
+  );
 }
 
 async function renewLease(jobId) {
@@ -133,7 +163,11 @@ async function download(key, destination) {
   await pipeline(res.Body, createWriteStream(destination));
 }
 
-function run(command, args, onLine) {
+/**
+ * Runs a command, mirroring its output to stdout only. Nothing is written to the
+ * database line by line — on failure the last few lines travel with the error.
+ */
+function run(command, args, tag = "") {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { env: { ...process.env } });
     let output = "";
@@ -144,14 +178,20 @@ function run(command, args, onLine) {
         .split("\n")
         .map((l) => l.trim())
         .filter(Boolean)
-        .forEach(onLine);
+        .forEach((line) => console.log(tag ? `${tag}: ${line}` : line));
     };
     child.stdout.on("data", handle);
     child.stderr.on("data", handle);
     child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0 ? resolve(output) : reject(new Error(`${command} exited with code ${code}`)),
-    );
+    child.on("close", (code) => {
+      if (code === 0) return resolve(output);
+      const tail = output
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l && /error|fail|invalid|denied|exception/i.test(l))
+        .slice(-5);
+      reject(new Error(`${command} exited with code ${code}${tail.length ? ` — ${tail.join(" | ")}` : ""}`));
+    });
   });
 }
 
