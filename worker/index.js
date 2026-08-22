@@ -307,18 +307,20 @@ async function processJob(jobId, uploadId) {
 
     // Record what was built so the admin can review the exact package contents.
     for (const pkg of packages) {
-      await supabase.from("delivery_packages").upsert(
-        {
-          upload_id: uploadId,
-          job_id: jobId,
-          vendor_id: pkg.vendorId,
-          title: pkg.title,
-          state: "awaiting_approval",
-          error_message: null,
-          metadata_xml: pkg.xml ?? null,
-          manifest: { files: pkg.assets ?? [], folder: `${pkg.vendorId}.itmsp` },
-        },
-        { onConflict: "job_id,vendor_id" },
+      await db("delivery_packages upsert", () =>
+        supabase.from("delivery_packages").upsert(
+          {
+            upload_id: uploadId,
+            job_id: jobId,
+            vendor_id: pkg.vendorId,
+            title: pkg.title,
+            state: "awaiting_approval",
+            error_message: null,
+            metadata_xml: pkg.xml ?? null,
+            manifest: { files: pkg.assets ?? [], folder: `${pkg.vendorId}.itmsp` },
+          },
+          { onConflict: "job_id,vendor_id" },
+        ),
       );
     }
 
