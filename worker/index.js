@@ -449,6 +449,15 @@ async function tick() {
 }
 
 
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== "ESRCH";
+  }
+}
+
 /**
  * Refuses to start when another worker process on this machine is already
  * delivering. Two processes sharing one login rotate each other's refresh
