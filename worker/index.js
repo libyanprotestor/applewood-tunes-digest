@@ -7,7 +7,7 @@
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, unlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -54,7 +54,8 @@ const s3 = new S3Client({
 });
 const BUCKET = env("B2_BUCKET");
 
-const WORKER_ID = process.env.WORKER_ID || `worker-${os.hostname()}`;
+// Unique per process, so two accidental instances are visible in the queue.
+const WORKER_ID = process.env.WORKER_ID || `worker-${os.hostname()}-${process.pid}`;
 const POLL_MS = Number(process.env.POLL_INTERVAL_MS || 15000);
 // Resolve the Transporter binary once at startup: the explicit path if it
 // exists, otherwise anything on PATH, otherwise search the install dir.
@@ -110,18 +111,48 @@ const PROVIDER = env("APPLE_PROVIDER_SHORTNAME");
 const APPLE_USER = env("APPLE_TRANSPORTER_USER");
 const APPLE_PASSWORD = env("APPLE_TRANSPORTER_PASSWORD");
 
+/**
+ * Runs a Supabase call and never lets its error pass silently. Auth failures
+ * (expired/revoked token) trigger one re-sign-in and a retry, so a long job
+ * cannot keep uploading to Apple while its database writes are being dropped.
+ */
+async function db(label, op) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await op();
+    if (!result?.error) return result;
+    const message = result.error.message || String(result.error);
+    if (attempt === 0 && /jwt|token|expired|unauthor|permission denied|refresh/i.test(message)) {
+      console.error(`${label}: ${message} — signing in again and retrying`);
+      await signIn();
+      continue;
+    }
+    throw new Error(`${label} failed: ${message}`);
+  }
+  return null;
+}
+
 async function log(jobId, line, level = "info") {
   const text = String(line).slice(0, 4000);
   console.log(`[${jobId}] ${text}`);
-  await supabase.from("delivery_logs").insert({ job_id: jobId, line: text, level });
+  try {
+    await db("log insert", () => supabase.from("delivery_logs").insert({ job_id: jobId, line: text, level }));
+  } catch (error) {
+    console.error("could not persist log line:", error.message);
+  }
 }
 
 async function setJob(jobId, patch) {
-  await supabase.from("delivery_jobs").update(patch).eq("id", jobId);
+  await db("delivery_jobs update", () => supabase.from("delivery_jobs").update(patch).eq("id", jobId));
 }
 
 async function setUpload(uploadId, patch) {
-  await supabase.from("uploads").update(patch).eq("id", uploadId);
+  await db("uploads update", () => supabase.from("uploads").update(patch).eq("id", uploadId));
+}
+
+async function setPackage(jobId, vendorId, patch) {
+  await db("delivery_packages update", () =>
+    supabase.from("delivery_packages").update(patch).eq("job_id", jobId).eq("vendor_id", vendorId),
+  );
 }
 
 async function renewLease(jobId) {
@@ -133,7 +164,11 @@ async function download(key, destination) {
   await pipeline(res.Body, createWriteStream(destination));
 }
 
-function run(command, args, onLine) {
+/**
+ * Runs a command, mirroring its output to stdout only. Nothing is written to the
+ * database line by line — on failure the last few lines travel with the error.
+ */
+function run(command, args, tag = "") {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { env: { ...process.env } });
     let output = "";
@@ -144,23 +179,27 @@ function run(command, args, onLine) {
         .split("\n")
         .map((l) => l.trim())
         .filter(Boolean)
-        .forEach(onLine);
+        .forEach((line) => console.log(tag ? `${tag}: ${line}` : line));
     };
     child.stdout.on("data", handle);
     child.stderr.on("data", handle);
     child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0 ? resolve(output) : reject(new Error(`${command} exited with code ${code}`)),
-    );
+    child.on("close", (code) => {
+      if (code === 0) return resolve(output);
+      const tail = output
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l && /error|fail|invalid|denied|exception/i.test(l))
+        .slice(-5);
+      reject(new Error(`${command} exited with code ${code}${tail.length ? ` — ${tail.join(" | ")}` : ""}`));
+    });
   });
 }
 
 async function isApproved(jobId) {
-  const { data } = await supabase
-    .from("delivery_jobs")
-    .select("approved_for_delivery")
-    .eq("id", jobId)
-    .single();
+  const { data } = await db("approval read", () =>
+    supabase.from("delivery_jobs").select("approved_for_delivery").eq("id", jobId).single(),
+  );
   return Boolean(data?.approved_for_delivery);
 }
 
@@ -223,13 +262,14 @@ async function processJob(jobId, uploadId) {
     const downloaded = new Set();
     const fetchOnce = async (file) => {
       if (!downloaded.has(file.filename)) {
-        await log(jobId, `Downloading ${file.filename}`);
+        console.log(`[${jobId}] downloading ${file.filename}`);
         await download(file.storage_key, path.join(workDir, file.filename));
         downloaded.add(file.filename);
       }
       return file.filename;
     };
 
+    await log(jobId, `Downloading assets for ${tracks.length} track(s).`);
     for (const track of tracks) {
       const audio = byId.get(track.file_id);
       if (!audio) throw new Error(`Track "${track.title}" has no audio file.`);
@@ -239,6 +279,7 @@ async function processJob(jobId, uploadId) {
       artworkNames.push(art ? await fetchOnce(art) : null);
       await renewLease(jobId);
     }
+    await log(jobId, `${downloaded.size} file(s) downloaded.`);
 
     const release = {
       kind: upload.kind,
@@ -265,18 +306,20 @@ async function processJob(jobId, uploadId) {
 
     // Record what was built so the admin can review the exact package contents.
     for (const pkg of packages) {
-      await supabase.from("delivery_packages").upsert(
-        {
-          upload_id: uploadId,
-          job_id: jobId,
-          vendor_id: pkg.vendorId,
-          title: pkg.title,
-          state: "awaiting_approval",
-          error_message: null,
-          metadata_xml: pkg.xml ?? null,
-          manifest: { files: pkg.assets ?? [], folder: `${pkg.vendorId}.itmsp` },
-        },
-        { onConflict: "job_id,vendor_id" },
+      await db("delivery_packages upsert", () =>
+        supabase.from("delivery_packages").upsert(
+          {
+            upload_id: uploadId,
+            job_id: jobId,
+            vendor_id: pkg.vendorId,
+            title: pkg.title,
+            state: "awaiting_approval",
+            error_message: null,
+            metadata_xml: pkg.xml ?? null,
+            manifest: { files: pkg.assets ?? [], folder: `${pkg.vendorId}.itmsp` },
+          },
+          { onConflict: "job_id,vendor_id" },
+        ),
       );
     }
 
@@ -304,34 +347,30 @@ async function uploadPackages(jobId, uploadId, packages) {
   await setUpload(uploadId, { status: "delivering" });
 
   const failures = [];
+  let index = 0;
   for (const pkg of packages) {
-    await supabase
-      .from("delivery_packages")
-      .update({ state: "uploading", error_message: null })
-      .eq("job_id", jobId)
-      .eq("vendor_id", pkg.vendorId);
+    index += 1;
+    // A long batch outlives one access token: re-check the session before every
+    // package so state updates can never be dropped mid-delivery.
+    await ensureSession();
+    await setPackage(jobId, pkg.vendorId, { state: "uploading", error_message: null });
     await renewLease(jobId);
+    await log(jobId, `Uploading ${index}/${packages.length}: ${pkg.vendorId}`);
     try {
       const output = await run(
         TRANSPORTER,
         ["-m", "upload", "-u", APPLE_USER, "-p", APPLE_PASSWORD, "-f", pkg.dir, "-k", "100000", "-WONoPause", "true"],
-        (line) => void log(jobId, `${pkg.vendorId}: ${line}`),
+        `${jobId} ${pkg.vendorId}`,
       );
       const ticket = output.match(/[Tt]ransaction[ _]?[Ii][Dd][:= ]+([\w-]+)/)?.[1] ?? null;
-      await supabase
-        .from("delivery_packages")
-        .update({ state: "succeeded", apple_ticket: ticket, error_message: null })
-        .eq("job_id", jobId)
-        .eq("vendor_id", pkg.vendorId);
+      await ensureSession();
+      await setPackage(jobId, pkg.vendorId, { state: "succeeded", apple_ticket: ticket, error_message: null });
       await log(jobId, `${pkg.vendorId}: accepted by Apple${ticket ? ` (ticket ${ticket})` : ""}.`, "success");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${pkg.vendorId}: ${message}`);
-      await supabase
-        .from("delivery_packages")
-        .update({ state: "failed", error_message: message })
-        .eq("job_id", jobId)
-        .eq("vendor_id", pkg.vendorId);
+      await ensureSession();
+      await setPackage(jobId, pkg.vendorId, { state: "failed", error_message: message });
       await log(jobId, `${pkg.vendorId}: rejected — ${message}`, "error");
     }
   }
@@ -410,13 +449,62 @@ async function tick() {
 }
 
 
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== "ESRCH";
+  }
+}
+
+/**
+ * Refuses to start when another worker process on this machine is already
+ * delivering. Two processes sharing one login rotate each other's refresh
+ * tokens, which silently kills database writes mid-delivery.
+ */
+async function acquireLock() {
+  const lockPath = path.join(WORK_ROOT, "worker.lock");
+  await fs.mkdir(WORK_ROOT, { recursive: true });
+
+  let previous = 0;
+  try {
+    previous = Number(await fs.readFile(lockPath, "utf8"));
+  } catch {
+    previous = 0; // no lock file yet
+  }
+  if (previous && previous !== process.pid && isRunning(previous)) {
+    throw new Error(`Another delivery worker is already running (pid ${previous}). Stop it first.`);
+  }
+
+  await fs.writeFile(lockPath, String(process.pid));
+  const release = () => {
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      /* already gone */
+    }
+  };
+  process.on("exit", release);
+  process.on("SIGINT", () => {
+    release();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    release();
+    process.exit(0);
+  });
+}
+
 async function main() {
+  await acquireLock();
   await resolveTransporter();
   await signIn();
-  console.log(`${WORKER_ID} polling every ${POLL_MS}ms`);
+  console.log(`${WORKER_ID} polling every ${POLL_MS}ms — one job at a time`);
   for (;;) {
     let worked = false;
     try {
+      // tick() awaits the whole job, so jobs are always processed sequentially.
       worked = await tick();
     } catch (error) {
       console.error("worker loop error:", error);

@@ -15,6 +15,7 @@ import {
   rejectPackages,
   finalizeDelivered,
   releaseIsrcsForUpload,
+  resyncJob,
   retryDelivery,
   previewMetadata,
   saveSheet,
@@ -147,6 +148,7 @@ function UploadDetail() {
   const queueFn = useServerFn(queueDelivery);
   const statusFn = useServerFn(setUploadStatus);
   const retryFn = useServerFn(retryDelivery);
+  const resyncFn = useServerFn(resyncJob);
   const cancelFn = useServerFn(cancelDelivery);
   const approveFn = useServerFn(approvePackages);
   const rejectFn = useServerFn(rejectPackages);
@@ -166,10 +168,12 @@ function UploadDetail() {
 
   const activeJob = detail.data?.jobs[0];
   const logs = useQuery({
+    // afterId 0 returns the newest lines, so long jobs show their live tail.
     queryKey: ["delivery-logs", activeJob?.id],
     queryFn: () => logsFn({ data: { jobId: activeJob!.id, afterId: 0 } }),
     enabled: Boolean(activeJob),
-    refetchInterval: activeJob && ["queued", "claimed", "packaging", "uploading"].includes(activeJob.state)
+    refetchInterval: activeJob &&
+      ["queued", "claimed", "packaging", "uploading", "awaiting_approval"].includes(activeJob.state)
       ? 4000
       : false,
   });
@@ -967,6 +971,21 @@ function UploadDetail() {
                       onClick={() => run("Requeued", () => retryFn({ data: { jobId: j.id } }))}
                     >
                       Retry
+                    </Button>
+                  )}
+                  {isAdmin && ["claimed", "packaging", "uploading"].includes(j.state) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      title="Apple already accepted these packages but the worker lost its connection — mark them delivered."
+                      onClick={() => {
+                        if (!confirm("Mark the remaining packages and this job as delivered? Nothing is sent to Apple."))
+                          return;
+                        void run("Resynced", () => resyncFn({ data: { jobId: j.id } }));
+                      }}
+                    >
+                      Resync state
                     </Button>
                   )}
                 </span>
