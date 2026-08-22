@@ -826,3 +826,62 @@ export const finalizeDelivered = createServerFn({ method: "POST" })
       message: `${added} catalog item${added === 1 ? "" : "s"} added; source files removed from storage.`,
     };
   });
+
+/**
+ * Housekeeping after Apple accepted a release: drops the delivery logs,
+ * packages, track sheet and file rows that are no longer needed.
+ */
+export const purgeDeliveredMetadata = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ uploadId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: upload, error } = await context.supabase
+      .from("uploads")
+      .select("id, status")
+      .eq("id", data.uploadId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!upload) throw new Error("Upload not found");
+    if (upload.status !== "delivered")
+      return { ok: false as const, message: "Only delivered releases can be cleaned up." };
+
+    const { data: jobs } = await context.supabase
+      .from("delivery_jobs")
+      .select("id")
+      .eq("upload_id", data.uploadId);
+    const jobIds = (jobs ?? []).map((j) => j.id);
+
+    let logs = 0;
+    if (jobIds.length) {
+      const { count } = await context.supabase
+        .from("delivery_logs")
+        .delete({ count: "exact" })
+        .in("job_id", jobIds);
+      logs = count ?? 0;
+    }
+    const { count: packages } = await context.supabase
+      .from("delivery_packages")
+      .delete({ count: "exact" })
+      .eq("upload_id", data.uploadId);
+    const { count: tracks } = await context.supabase
+      .from("upload_tracks")
+      .delete({ count: "exact" })
+      .eq("upload_id", data.uploadId);
+    const { count: files } = await context.supabase
+      .from("upload_files")
+      .delete({ count: "exact" })
+      .eq("upload_id", data.uploadId);
+
+    await context.supabase
+      .from("uploads")
+      .update({ file_count: 0, total_bytes: 0 })
+      .eq("id", data.uploadId);
+
+    return {
+      ok: true as const,
+      message: `Cleaned up ${logs} log lines, ${packages ?? 0} packages, ${tracks ?? 0} track rows and ${files ?? 0} file rows.`,
+    };
+  });
