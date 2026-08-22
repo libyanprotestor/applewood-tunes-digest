@@ -14,6 +14,7 @@ import {
   approvePackages,
   rejectPackages,
   finalizeDelivered,
+  purgeDeliveredMetadata,
   releaseIsrcsForUpload,
   resyncJob,
   retryDelivery,
@@ -160,6 +161,7 @@ function UploadDetail() {
   const previewFn = useServerFn(previewMetadata);
   const mediaFn = useServerFn(uploadMediaUrls);
   const finalizeFn = useServerFn(finalizeDelivered);
+  const purgeFn = useServerFn(purgeDeliveredMetadata);
 
   const [preview, setPreview] = useState<
     | null
@@ -788,6 +790,28 @@ function UploadDetail() {
               >
                 Delete upload
               </Button>
+            </div>
+          )}
+          {isAdmin && delivered && (
+            <div className="mt-2">
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Remove delivery logs, packages, the track sheet and file rows for this delivered release?",
+                    )
+                  )
+                    return;
+                  void run("Metadata cleaned up", () => purgeFn({ data: { uploadId: id } }));
+                }}
+              >
+                Clean up delivery metadata
+              </Button>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Frees database space. The catalog items stay, Apple already has the release.
+              </p>
             </div>
           )}
         </section>
