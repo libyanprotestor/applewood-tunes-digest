@@ -15,6 +15,7 @@ import {
   rejectPackages,
   finalizeDelivered,
   releaseIsrcsForUpload,
+  resyncJob,
   retryDelivery,
   previewMetadata,
   saveSheet,
