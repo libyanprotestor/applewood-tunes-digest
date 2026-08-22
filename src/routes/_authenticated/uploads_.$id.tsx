@@ -14,6 +14,7 @@ import {
   approvePackages,
   rejectPackages,
   finalizeDelivered,
+  purgeDeliveredMetadata,
   releaseIsrcsForUpload,
   resyncJob,
   retryDelivery,
@@ -160,6 +161,7 @@ function UploadDetail() {
   const previewFn = useServerFn(previewMetadata);
   const mediaFn = useServerFn(uploadMediaUrls);
   const finalizeFn = useServerFn(finalizeDelivered);
+  const purgeFn = useServerFn(purgeDeliveredMetadata);
 
   const [preview, setPreview] = useState<
     | null
