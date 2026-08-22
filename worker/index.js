@@ -348,34 +348,30 @@ async function uploadPackages(jobId, uploadId, packages) {
   await setUpload(uploadId, { status: "delivering" });
 
   const failures = [];
+  let index = 0;
   for (const pkg of packages) {
-    await supabase
-      .from("delivery_packages")
-      .update({ state: "uploading", error_message: null })
-      .eq("job_id", jobId)
-      .eq("vendor_id", pkg.vendorId);
+    index += 1;
+    // A long batch outlives one access token: re-check the session before every
+    // package so state updates can never be dropped mid-delivery.
+    await ensureSession();
+    await setPackage(jobId, pkg.vendorId, { state: "uploading", error_message: null });
     await renewLease(jobId);
+    await log(jobId, `Uploading ${index}/${packages.length}: ${pkg.vendorId}`);
     try {
       const output = await run(
         TRANSPORTER,
         ["-m", "upload", "-u", APPLE_USER, "-p", APPLE_PASSWORD, "-f", pkg.dir, "-k", "100000", "-WONoPause", "true"],
-        (line) => void log(jobId, `${pkg.vendorId}: ${line}`),
+        `${jobId} ${pkg.vendorId}`,
       );
       const ticket = output.match(/[Tt]ransaction[ _]?[Ii][Dd][:= ]+([\w-]+)/)?.[1] ?? null;
-      await supabase
-        .from("delivery_packages")
-        .update({ state: "succeeded", apple_ticket: ticket, error_message: null })
-        .eq("job_id", jobId)
-        .eq("vendor_id", pkg.vendorId);
+      await ensureSession();
+      await setPackage(jobId, pkg.vendorId, { state: "succeeded", apple_ticket: ticket, error_message: null });
       await log(jobId, `${pkg.vendorId}: accepted by Apple${ticket ? ` (ticket ${ticket})` : ""}.`, "success");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${pkg.vendorId}: ${message}`);
-      await supabase
-        .from("delivery_packages")
-        .update({ state: "failed", error_message: message })
-        .eq("job_id", jobId)
-        .eq("vendor_id", pkg.vendorId);
+      await ensureSession();
+      await setPackage(jobId, pkg.vendorId, { state: "failed", error_message: message });
       await log(jobId, `${pkg.vendorId}: rejected — ${message}`, "error");
     }
   }
