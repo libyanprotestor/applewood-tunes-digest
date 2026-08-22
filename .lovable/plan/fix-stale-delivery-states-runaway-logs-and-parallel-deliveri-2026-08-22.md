@@ -40,7 +40,7 @@ Full Transporter output still goes to the container's stdout (`docker logs`) for
 ### 4. Log panel shows the live tail
 
 - `deliveryLogs` returns the newest lines (ordered newest-first, then reversed for display) and supports incremental polling by last seen id.
-- Panel keeps polling while the job is packaging, uploading or awaiting approval, so you see progress in real time.
+- Panel keeps job is packaging, uploading or awaitpolling while the ing approval, so you see progress in real time.
 
 ### 5. Recovering the two stuck jobs
 
