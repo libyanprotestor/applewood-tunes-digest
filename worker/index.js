@@ -449,13 +449,57 @@ async function tick() {
 }
 
 
+/**
+ * Refuses to start when another worker process on this machine is already
+ * delivering. Two processes sharing one login rotate each other's refresh
+ * tokens, which silently kills database writes mid-delivery.
+ */
+async function acquireLock() {
+  const lockPath = path.join(WORK_ROOT, "worker.lock");
+  await fs.mkdir(WORK_ROOT, { recursive: true });
+  try {
+    const previous = Number(await fs.readFile(lockPath, "utf8"));
+    if (previous && previous !== process.pid) {
+      try {
+        process.kill(previous, 0); // throws when the process is gone
+        throw new Error(`Another delivery worker is already running (pid ${previous}). Stop it first.`);
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      if (!/no such file/i.test(error.message ?? "")) throw error;
+    }
+  }
+  await fs.writeFile(lockPath, String(process.pid));
+  const release = () => {
+    try {
+      require("node:fs").unlinkSync(lockPath);
+    } catch {
+      /* already gone */
+    }
+  };
+  process.on("exit", release);
+  process.on("SIGINT", () => {
+    release();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    release();
+    process.exit(0);
+  });
+}
+
 async function main() {
+  await acquireLock();
   await resolveTransporter();
   await signIn();
-  console.log(`${WORKER_ID} polling every ${POLL_MS}ms`);
+  console.log(`${WORKER_ID} polling every ${POLL_MS}ms — one job at a time`);
   for (;;) {
     let worked = false;
     try {
+      // tick() awaits the whole job, so jobs are always processed sequentially.
       worked = await tick();
     } catch (error) {
       console.error("worker loop error:", error);
