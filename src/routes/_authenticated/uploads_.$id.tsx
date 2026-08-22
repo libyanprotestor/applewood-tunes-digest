@@ -166,10 +166,12 @@ function UploadDetail() {
 
   const activeJob = detail.data?.jobs[0];
   const logs = useQuery({
+    // afterId 0 returns the newest lines, so long jobs show their live tail.
     queryKey: ["delivery-logs", activeJob?.id],
     queryFn: () => logsFn({ data: { jobId: activeJob!.id, afterId: 0 } }),
     enabled: Boolean(activeJob),
-    refetchInterval: activeJob && ["queued", "claimed", "packaging", "uploading"].includes(activeJob.state)
+    refetchInterval: activeJob &&
+      ["queued", "claimed", "packaging", "uploading", "awaiting_approval"].includes(activeJob.state)
       ? 4000
       : false,
   });
