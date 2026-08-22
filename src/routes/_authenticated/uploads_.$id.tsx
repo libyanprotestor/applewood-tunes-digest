@@ -148,6 +148,7 @@ function UploadDetail() {
   const queueFn = useServerFn(queueDelivery);
   const statusFn = useServerFn(setUploadStatus);
   const retryFn = useServerFn(retryDelivery);
+  const resyncFn = useServerFn(resyncJob);
   const cancelFn = useServerFn(cancelDelivery);
   const approveFn = useServerFn(approvePackages);
   const rejectFn = useServerFn(rejectPackages);
