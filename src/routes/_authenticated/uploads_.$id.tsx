@@ -973,6 +973,21 @@ function UploadDetail() {
                       Retry
                     </Button>
                   )}
+                  {isAdmin && ["claimed", "packaging", "uploading"].includes(j.state) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      title="Apple already accepted these packages but the worker lost its connection — mark them delivered."
+                      onClick={() => {
+                        if (!confirm("Mark the remaining packages and this job as delivered? Nothing is sent to Apple."))
+                          return;
+                        void run("Resynced", () => resyncFn({ data: { jobId: j.id } }));
+                      }}
+                    >
+                      Resync state
+                    </Button>
+                  )}
                 </span>
               </li>
             ))}
