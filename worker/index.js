@@ -457,25 +457,21 @@ async function tick() {
 async function acquireLock() {
   const lockPath = path.join(WORK_ROOT, "worker.lock");
   await fs.mkdir(WORK_ROOT, { recursive: true });
+
+  let previous = 0;
   try {
-    const previous = Number(await fs.readFile(lockPath, "utf8"));
-    if (previous && previous !== process.pid) {
-      try {
-        process.kill(previous, 0); // throws when the process is gone
-        throw new Error(`Another delivery worker is already running (pid ${previous}). Stop it first.`);
-      } catch (error) {
-        if (error.code !== "ESRCH") throw error;
-      }
-    }
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      if (!/no such file/i.test(error.message ?? "")) throw error;
-    }
+    previous = Number(await fs.readFile(lockPath, "utf8"));
+  } catch {
+    previous = 0; // no lock file yet
   }
+  if (previous && previous !== process.pid && isRunning(previous)) {
+    throw new Error(`Another delivery worker is already running (pid ${previous}). Stop it first.`);
+  }
+
   await fs.writeFile(lockPath, String(process.pid));
   const release = () => {
     try {
-      require("node:fs").unlinkSync(lockPath);
+      unlinkSync(lockPath);
     } catch {
       /* already gone */
     }
