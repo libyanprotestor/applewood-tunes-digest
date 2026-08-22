@@ -54,7 +54,8 @@ const s3 = new S3Client({
 });
 const BUCKET = env("B2_BUCKET");
 
-const WORKER_ID = process.env.WORKER_ID || `worker-${os.hostname()}`;
+// Unique per process, so two accidental instances are visible in the queue.
+const WORKER_ID = process.env.WORKER_ID || `worker-${os.hostname()}-${process.pid}`;
 const POLL_MS = Number(process.env.POLL_INTERVAL_MS || 15000);
 // Resolve the Transporter binary once at startup: the explicit path if it
 // exists, otherwise anything on PATH, otherwise search the install dir.
