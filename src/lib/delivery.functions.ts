@@ -421,21 +421,82 @@ export const retryDelivery = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+/**
+ * Log tail for one job. With `afterId` it returns the lines written since then;
+ * without it, the newest 300 lines (so long jobs show their live tail, not their
+ * first 500 lines).
+ */
 export const deliveryLogs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z.object({ jobId: z.string().uuid(), afterId: z.number().int().default(0) }).parse(input),
   )
   .handler(async ({ data, context }) => {
+    if (data.afterId > 0) {
+      const { data: rows, error } = await context.supabase
+        .from("delivery_logs")
+        .select("id, line, level, created_at")
+        .eq("job_id", data.jobId)
+        .gt("id", data.afterId)
+        .order("id")
+        .limit(500);
+      if (error) throw new Error(error.message);
+      return rows ?? [];
+    }
     const { data: rows, error } = await context.supabase
       .from("delivery_logs")
       .select("id, line, level, created_at")
       .eq("job_id", data.jobId)
-      .gt("id", data.afterId)
-      .order("id")
-      .limit(500);
+      .order("id", { ascending: false })
+      .limit(300);
     if (error) throw new Error(error.message);
-    return rows ?? [];
+    return (rows ?? []).slice().reverse();
+  });
+
+/**
+ * Reconciles a job whose worker lost its database session mid-upload: the
+ * packages went to Apple but their rows were never updated. Marks the leftover
+ * packages and the job as delivered. Nothing is sent to Apple from here.
+ */
+export const resyncJob = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ jobId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./guards.server");
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: job, error: jobError } = await context.supabase
+      .from("delivery_jobs")
+      .select("id, upload_id, state")
+      .eq("id", data.jobId)
+      .maybeSingle();
+    if (jobError) throw new Error(jobError.message);
+    if (!job) throw new Error("Job not found");
+
+    const { data: stale, error: staleError } = await context.supabase
+      .from("delivery_packages")
+      .update({ state: "succeeded", error_message: null })
+      .eq("job_id", data.jobId)
+      .in("state", ["queued", "claimed", "packaging", "uploading", "awaiting_approval"])
+      .select("id");
+    if (staleError) throw new Error(staleError.message);
+
+    const { error } = await context.supabase
+      .from("delivery_jobs")
+      .update({
+        state: "succeeded",
+        error_message: null,
+        approved_for_delivery: true,
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", data.jobId);
+    if (error) throw new Error(error.message);
+    await context.supabase.from("uploads").update({ status: "delivered" }).eq("id", job.upload_id);
+
+    return {
+      ok: true as const,
+      message: `Marked ${stale?.length ?? 0} package${(stale?.length ?? 0) === 1 ? "" : "s"} and the job as delivered.`,
+    };
   });
 
 export const deliveryQueue = createServerFn({ method: "GET" })
